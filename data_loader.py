@@ -1,76 +1,63 @@
 import numpy as np
 import pandas as pd
 
-from config import METROS, METRO_ZIPS
-
-# Approximate 2024 metro medians. Add an entry here whenever you add a metro to METRO_ZIPS.
-# Fallback (400k / $70k) is used for any metro not listed.
-_METRO_ANCHORS: dict[str, dict] = {
-    "Seattle WA":   {"median_price": 800_000, "median_income": 110_000},
-    "Denver CO":    {"median_price": 600_000, "median_income":  95_000},
-    "Austin TX":    {"median_price": 550_000, "median_income":  90_000},
-    "Nashville TN": {"median_price": 420_000, "median_income":  72_000},
-    "Raleigh NC":   {"median_price": 400_000, "median_income":  75_000},
-    "Dallas TX":    {"median_price": 390_000, "median_income":  70_000},
-    "Phoenix AZ":   {"median_price": 380_000, "median_income":  68_000},
-    "Charlotte NC": {"median_price": 375_000, "median_income":  68_000},
-    "Atlanta GA":   {"median_price": 370_000, "median_income":  67_000},
-    "Tampa FL":     {"median_price": 360_000, "median_income":  65_000},
-}
-_FALLBACK_ANCHOR = {"median_price": 400_000, "median_income": 70_000}
+from config import FALLBACK_ANCHOR, METRO_ANCHORS, METROS, METRO_ZIPS, SYNTH_PARAMS
 
 
 def generate_synthetic_data() -> pd.DataFrame:
     """Synthetic stand-in for production data. Replace with a real feed (MLS, Zillow API, ATTOM, CoreLogic) before going live."""
     rng = np.random.default_rng(42)
+    p   = SYNTH_PARAMS
 
     rows = []
 
     for metro in METROS:
-        anchor       = _METRO_ANCHORS.get(metro, _FALLBACK_ANCHOR)
+        anchor       = METRO_ANCHORS.get(metro, FALLBACK_ANCHOR)
         metro_price  = anchor["median_price"]
         metro_income = anchor["median_income"]
 
         for zip_code in METRO_ZIPS[metro]:
-            # Single heat index drives all correlated market signals (0.2 = cold, 1.0 = hot)
-            heat = float(rng.uniform(0.2, 1.0))
+            # Single heat index drives all correlated market signals
+            heat = float(rng.uniform(p["heat_min"], p["heat_max"]))
 
             # Income: metro-anchored with zip-level spread
             median_household_income = max(
-                30_000,
-                round(float(rng.normal(metro_income, metro_income * 0.15)), 2),
+                p["income_floor"],
+                round(float(rng.normal(metro_income, metro_income * p["income_spread_pct"])), 2),
             )
 
             # Price: metro-anchored, nudged by local income deviation
             income_ratio      = median_household_income / metro_income
             median_sale_price = max(
-                100_000,
-                round(metro_price * income_ratio * float(rng.normal(1.0, 0.12)), 2),
+                p["price_floor"],
+                round(metro_price * income_ratio * float(rng.normal(1.0, p["price_noise_std"])), 2),
             )
 
             # Sqft generated first; price_per_sqft derived from it (not backwards)
-            sqft           = float(rng.uniform(900, 2_800))
+            sqft           = float(rng.uniform(p["sqft_min"], p["sqft_max"]))
             price_per_sqft = round(median_sale_price / sqft, 2)
 
-            # Rent anchored to price via gross yield (4–9% annualised)
+            # Rent anchored to price via gross yield
             fair_market_rent_2br = max(
-                600,
-                round((median_sale_price * float(rng.uniform(0.04, 0.09))) / 12, 2),
+                p["rent_floor"],
+                round((median_sale_price * float(rng.uniform(p["gross_yield_min"], p["gross_yield_max"]))) / 12, 2),
             )
 
             # Days on market: hotter market → faster sales
-            dom_low        = max(5,  int(5  + (1 - heat) * 30))
-            dom_high       = max(15, int(20 + (1 - heat) * 100))
+            dom_low        = max(p["dom_floor_low"],  int(p["dom_base_low"]  + (1 - heat) * p["dom_cold_spread_low"]))
+            dom_high       = max(p["dom_floor_high"], int(p["dom_base_high"] + (1 - heat) * p["dom_cold_spread_high"]))
             days_on_market = int(rng.integers(dom_low, dom_high + 1))
 
             # Homes sold: cheaper markets transact more frequently
-            price_factor = metro_price / 400_000
-            sold_low     = max(2,  int(10  / price_factor))
-            sold_high    = max(10, int(150 / price_factor))
+            price_factor = metro_price / p["sold_norm_price"]
+            sold_low     = max(p["sold_floor_low"],  int(p["sold_base_low"]  / price_factor))
+            sold_high    = max(p["sold_floor_high"], int(p["sold_base_high"] / price_factor))
             homes_sold   = int(rng.integers(sold_low, sold_high + 1))
 
-            # YoY appreciation: hotter markets appreciate faster (roughly −2% to +18%)
-            yoy_appreciation = round(float(rng.normal(heat * 0.12 - 0.01, 0.03)), 4)
+            # YoY appreciation: hotter markets appreciate faster
+            yoy_appreciation = round(
+                float(rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"])), 4
+            )
 
             rows.append({
                 "zip_code":                zip_code,

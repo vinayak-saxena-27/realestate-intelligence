@@ -45,6 +45,59 @@ METRO_ZIPS: dict[str, list[str]] = {
 
 METROS: list[str] = list(METRO_ZIPS.keys())
 
+# ── Metro Anchors (approximate 2024 medians) ─────────────────────────────────
+# Add an entry here whenever you add a metro to METRO_ZIPS.
+METRO_ANCHORS: dict[str, dict] = {
+    "Seattle WA":   {"median_price": 800_000, "median_income": 110_000},
+    "Denver CO":    {"median_price": 600_000, "median_income":  95_000},
+    "Austin TX":    {"median_price": 550_000, "median_income":  90_000},
+    "Nashville TN": {"median_price": 420_000, "median_income":  72_000},
+    "Raleigh NC":   {"median_price": 400_000, "median_income":  75_000},
+    "Dallas TX":    {"median_price": 390_000, "median_income":  70_000},
+    "Phoenix AZ":   {"median_price": 380_000, "median_income":  68_000},
+    "Charlotte NC": {"median_price": 375_000, "median_income":  68_000},
+    "Atlanta GA":   {"median_price": 370_000, "median_income":  67_000},
+    "Tampa FL":     {"median_price": 360_000, "median_income":  65_000},
+}
+FALLBACK_ANCHOR: dict = {"median_price": 400_000, "median_income": 70_000}
+
+# ── Synthetic Data Generation Parameters ─────────────────────────────────────
+SYNTH_PARAMS: dict = {
+    # heat index (0 = cold market, 1 = hot market)
+    "heat_min":             0.2,
+    "heat_max":             1.0,
+    # income
+    "income_spread_pct":    0.15,   # std dev as fraction of metro median
+    "income_floor":         30_000,
+    # price
+    "price_noise_std":      0.12,
+    "price_floor":          100_000,
+    # sqft
+    "sqft_min":             900,
+    "sqft_max":             2_800,
+    # rent (gross annual yield applied to price)
+    "gross_yield_min":      0.04,
+    "gross_yield_max":      0.09,
+    "rent_floor":           600,
+    # days on market  →  low = max(floor_low, base_low + (1-heat)*cold_spread_low)
+    "dom_base_low":         5,
+    "dom_cold_spread_low":  30,
+    "dom_floor_low":        5,
+    "dom_base_high":        20,
+    "dom_cold_spread_high": 100,
+    "dom_floor_high":       15,
+    # homes sold  →  scaled by metro_price / norm_price
+    "sold_norm_price":      400_000,
+    "sold_base_low":        10,
+    "sold_base_high":       150,
+    "sold_floor_low":       2,
+    "sold_floor_high":      10,
+    # yoy appreciation  →  normal(heat * scale + offset, std)
+    "appr_heat_scale":      0.12,
+    "appr_heat_offset":     -0.01,
+    "appr_std":             0.03,
+}
+
 # ── Model Parameters ──────────────────────────────────────────────────────────
 # Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py
 RF_PARAMS: dict = {
