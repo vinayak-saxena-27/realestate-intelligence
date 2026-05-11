@@ -5,18 +5,19 @@ from config import METROS, METRO_ZIPS
 
 
 def generate_synthetic_data() -> pd.DataFrame:
-    np.random.seed(42)
+    """Synthetic stand-in for production data. Replace with a real feed (MLS, Zillow API, ATTOM, CoreLogic) before going live."""
+    rng = np.random.default_rng(42)
 
     rows = []
 
     for metro in METROS:
         for zip_code in METRO_ZIPS[metro]:
-            median_sale_price = round(np.random.uniform(150_000, 900_000), 2)
-            price_per_sqft    = round(median_sale_price / np.random.uniform(400, 2500), 2)
-            days_on_market    = int(np.random.randint(5, 121))
-            homes_sold        = int(np.random.randint(5, 201))
-            median_household_income = round(np.random.uniform(35_000, 180_000), 2)
-            fair_market_rent_2br    = round(np.random.uniform(700, 3_500), 2)
+            median_sale_price = round(rng.uniform(150_000, 900_000), 2)
+            price_per_sqft    = round(median_sale_price / rng.uniform(400, 2500), 2)
+            days_on_market    = int(rng.integers(5, 121))
+            homes_sold        = int(rng.integers(5, 201))
+            median_household_income = round(rng.uniform(35_000, 180_000), 2)
+            fair_market_rent_2br    = round(rng.uniform(700, 3_500), 2)
 
             rows.append({
                 "zip_code":                zip_code,

@@ -8,6 +8,8 @@ LIGHT_GRAY = "#F5F5F5"
 
 # ── Metro → Zip Codes (single source of truth) ───────────────────────────────
 # To add a metro: add one entry here. METROS is derived automatically.
+# In production, replace synthetic generation in data_loader.py with a real
+# feed (MLS, Zillow API, ATTOM, CoreLogic) keyed on these same zip codes.
 METRO_ZIPS: dict[str, list[str]] = {
     "Austin TX":    ["78701","78702","78703","78704","78705","78721","78722",
                      "78723","78724","78725","78726","78727","78728","78729",
