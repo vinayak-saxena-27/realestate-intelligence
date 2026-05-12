@@ -47,7 +47,7 @@ METROS: list[str] = list(METRO_ZIPS.keys())
 
 # ── Metro Anchors (approximate 2024 medians) ─────────────────────────────────
 # Add an entry here whenever you add a metro to METRO_ZIPS.
-METRO_ANCHORS: dict[str, dict] = {
+METRO_ANCHORS: dict[str, dict[str, int]] = {
     "Seattle WA":   {"median_price": 800_000, "median_income": 110_000},
     "Denver CO":    {"median_price": 600_000, "median_income":  95_000},
     "Austin TX":    {"median_price": 550_000, "median_income":  90_000},
@@ -59,10 +59,10 @@ METRO_ANCHORS: dict[str, dict] = {
     "Atlanta GA":   {"median_price": 370_000, "median_income":  67_000},
     "Tampa FL":     {"median_price": 360_000, "median_income":  65_000},
 }
-FALLBACK_ANCHOR: dict = {"median_price": 400_000, "median_income": 70_000}
+FALLBACK_ANCHOR: dict[str, int] = {"median_price": 400_000, "median_income": 70_000}
 
 # ── Synthetic Data Generation Parameters ─────────────────────────────────────
-SYNTH_PARAMS: dict = {
+SYNTH_PARAMS: dict[str, float] = {
     # heat index (0 = cold market, 1 = hot market)
     "heat_min":             0.2,
     "heat_max":             1.0,

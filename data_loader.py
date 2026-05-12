@@ -18,19 +18,19 @@ def generate_synthetic_data() -> pd.DataFrame:
 
         for zip_code in METRO_ZIPS[metro]:
             # Single heat index drives all correlated market signals
-            heat = float(rng.uniform(p["heat_min"], p["heat_max"]))
+            heat = rng.uniform(p["heat_min"], p["heat_max"])
 
             # Income: metro-anchored with zip-level spread
             median_household_income = max(
                 p["income_floor"],
-                round(float(rng.normal(metro_income, metro_income * p["income_spread_pct"])), 2),
+                round(rng.normal(metro_income, metro_income * p["income_spread_pct"]), 2),
             )
 
             # Price: metro-anchored, nudged by local income deviation
             income_ratio      = median_household_income / metro_income
             median_sale_price = max(
                 p["price_floor"],
-                round(metro_price * income_ratio * float(rng.normal(1.0, p["price_noise_std"])), 2),
+                round(metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"]), 2),
             )
 
             # Sqft generated first; price_per_sqft derived from it (not backwards)
@@ -40,7 +40,7 @@ def generate_synthetic_data() -> pd.DataFrame:
             # Rent anchored to price via gross yield
             fair_market_rent_2br = max(
                 p["rent_floor"],
-                round((median_sale_price * float(rng.uniform(p["gross_yield_min"], p["gross_yield_max"]))) / 12, 2),
+                round((median_sale_price * rng.uniform(p["gross_yield_min"], p["gross_yield_max"])) / 12, 2),
             )
 
             # Days on market: hotter market → faster sales
@@ -56,7 +56,7 @@ def generate_synthetic_data() -> pd.DataFrame:
 
             # YoY appreciation: hotter markets appreciate faster
             yoy_appreciation = round(
-                float(rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"])), 4
+                rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"]), 4
             )
 
             rows.append({
