@@ -76,7 +76,9 @@ def generate_synthetic_data() -> pd.DataFrame:
     expected = sum(len(v) for v in METRO_ZIPS.values())
     assert df.shape[0] == expected, f"Expected {expected} rows, got {df.shape[0]}"
     assert df.isnull().sum().sum() == 0, "DataFrame contains NaN values"
-    assert (df["median_sale_price"] > 0).all(), "Price column contains zeros"
+    assert (df["median_sale_price"] >= p["price_floor"]).all(), "median_sale_price below price_floor"
+    assert (df["fair_market_rent_2br"] >= p["rent_floor"]).all(), "fair_market_rent_2br below rent_floor"
+    assert (df["median_household_income"] >= p["income_floor"]).all(), "median_household_income below income_floor"
 
     return df
 

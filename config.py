@@ -131,3 +131,6 @@ SCORING_WEIGHTS: dict[str, float] = {
 }
 
 assert abs(sum(SCORING_WEIGHTS.values()) - 1.0) < 1e-9, "Scoring weights must sum to 1.0"
+assert METRO_ANCHORS.keys() == METRO_ZIPS.keys(), "METRO_ANCHORS keys must match METRO_ZIPS keys"
+assert list(GRADE_THRESHOLDS.values()) == sorted(GRADE_THRESHOLDS.values(), reverse=True), \
+    "GRADE_THRESHOLDS must be ordered high → low"
