@@ -98,6 +98,11 @@ SYNTH_PARAMS: dict[str, float] = {
     "appr_std":             0.03,
 }
 
+# ── Data Generation ───────────────────────────────────────────────────────────
+RNG_SEED: int       = 42
+PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
+APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
+
 # ── Model Parameters ──────────────────────────────────────────────────────────
 # Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py
 RF_PARAMS: dict = {

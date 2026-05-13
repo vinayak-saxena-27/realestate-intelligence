@@ -1,8 +1,16 @@
 import numpy as np
 import pandas as pd
 
-from config import FALLBACK_ANCHOR, METRO_ANCHORS, METROS, METRO_ZIPS, SYNTH_PARAMS
-
+from config import (
+    APPR_ROUND_DP,
+    FALLBACK_ANCHOR,
+    METRO_ANCHORS,
+    METROS,
+    METRO_ZIPS,
+    PRICE_ROUND_DP,
+    RNG_SEED,
+    SYNTH_PARAMS,
+)
 
 def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) -> dict:
     p            = SYNTH_PARAMS
@@ -15,24 +23,24 @@ def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) 
     # Income: metro-anchored with zip-level spread
     median_household_income = max(
         p["income_floor"],
-        round(rng.normal(metro_income, metro_income * p["income_spread_pct"]), 2),
+        round(rng.normal(metro_income, metro_income * p["income_spread_pct"]), PRICE_ROUND_DP),
     )
 
     # Price: metro-anchored, nudged by local income deviation
     income_ratio      = median_household_income / metro_income
     median_sale_price = max(
         p["price_floor"],
-        round(metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"]), 2),
+        round(metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"]), PRICE_ROUND_DP),
     )
 
     # Sqft generated first; price_per_sqft derived from it (not backwards)
     sqft           = rng.uniform(p["sqft_min"], p["sqft_max"])
-    price_per_sqft = round(median_sale_price / sqft, 2)
+    price_per_sqft = round(median_sale_price / sqft, PRICE_ROUND_DP)
 
     # Rent anchored to price via gross yield
     fair_market_rent_2br = max(
         p["rent_floor"],
-        round((median_sale_price * rng.uniform(p["gross_yield_min"], p["gross_yield_max"])) / 12, 2),
+        round((median_sale_price * rng.uniform(p["gross_yield_min"], p["gross_yield_max"])) / 12, PRICE_ROUND_DP),
     )
 
     # Days on market: hotter market → faster sales
@@ -48,7 +56,7 @@ def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) 
 
     # YoY appreciation: hotter markets appreciate faster
     yoy_appreciation = round(
-        rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"]), 4
+        rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"]), APPR_ROUND_DP
     )
 
     return {
@@ -66,7 +74,7 @@ def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) 
 
 def generate_synthetic_data() -> pd.DataFrame:
     """Synthetic stand-in for production data. Replace with a real feed (MLS, Zillow API, ATTOM, CoreLogic) before going live."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(RNG_SEED)
 
     rows = [
         _zip_row(rng, metro, zip_code, METRO_ANCHORS.get(metro, FALLBACK_ANCHOR))
