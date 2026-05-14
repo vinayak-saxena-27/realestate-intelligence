@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import streamlit as st
 
 from config import (
     APPR_ROUND_DP,
@@ -72,25 +73,25 @@ def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) 
     }
 
 
+@st.cache_data
 def generate_synthetic_data() -> pd.DataFrame:
     """Synthetic stand-in for production data. Replace with a real feed (MLS, Zillow API, ATTOM, CoreLogic) before going live."""
     rng = np.random.default_rng(RNG_SEED)
 
-    rows = [
-        _zip_row(rng, metro, zip_code, METRO_ANCHORS.get(metro, FALLBACK_ANCHOR))
-        for metro in METROS
-        for zip_code in METRO_ZIPS[metro]
-    ]
+    rows = []
+    for metro in METROS:
+        anchor = METRO_ANCHORS.get(metro, FALLBACK_ANCHOR)
+        for zip_code in METRO_ZIPS[metro]:
+            rows.append(_zip_row(rng, metro, zip_code, anchor))
 
     df = pd.DataFrame(rows)
-    p  = SYNTH_PARAMS
 
     expected = sum(len(v) for v in METRO_ZIPS.values())
     assert df.shape[0] == expected, f"Expected {expected} rows, got {df.shape[0]}"
     assert df.isnull().sum().sum() == 0, "DataFrame contains NaN values"
-    assert (df["median_sale_price"] >= p["price_floor"]).all(), "median_sale_price below price_floor"
-    assert (df["fair_market_rent_2br"] >= p["rent_floor"]).all(), "fair_market_rent_2br below rent_floor"
-    assert (df["median_household_income"] >= p["income_floor"]).all(), "median_household_income below income_floor"
+    assert (df["median_sale_price"] >= SYNTH_PARAMS["price_floor"]).all(), "median_sale_price below price_floor"
+    assert (df["fair_market_rent_2br"] >= SYNTH_PARAMS["rent_floor"]).all(), "fair_market_rent_2br below rent_floor"
+    assert (df["median_household_income"] >= SYNTH_PARAMS["income_floor"]).all(), "median_household_income below income_floor"
 
     return df
 
