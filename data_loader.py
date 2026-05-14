@@ -120,7 +120,12 @@ def _build_metro_block(
 
 
 def _build_dataframe() -> pd.DataFrame:
-    """Pure generation — no Streamlit dependency. Swap for a real data feed without touching the cache layer."""
+    """Synthetic data source — pure NumPy/Pandas, no Streamlit dependency.
+
+    To switch to a real feed: replace the body of this function with your API /
+    database call and return a DataFrame. load_data() and the rest of the app
+    need no changes — validate_schema() will catch any schema mismatches.
+    """
     rng = np.random.default_rng(RNG_SEED)
     p   = SYNTH_PARAMS
 
@@ -140,15 +145,20 @@ def _build_dataframe() -> pd.DataFrame:
     return df
 
 
+# ── Public API ────────────────────────────────────────────────────────────────
+# All app modules must import and call load_data() — never _build_dataframe()
+# directly. The cache sits here, above the data source, so the data source can
+# be swapped without touching the cache layer or any call site in the app.
+# For a real feed that refreshes: @st.cache_data(ttl=3600)
+
 @st.cache_data
-def generate_synthetic_data() -> pd.DataFrame:
-    """Cached Streamlit entry point. To swap in a real feed, replace _build_dataframe()."""
-    df = _build_dataframe()
+def load_data() -> pd.DataFrame:
+    df = _build_dataframe()  # ← only this line changes when switching data sources
     validate_schema(df)
     return df
 
 
 if __name__ == "__main__":
-    df = generate_synthetic_data()
+    df = load_data()
     print("Shape:", df.shape)
     print(df.head())
