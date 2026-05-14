@@ -75,33 +75,59 @@ SYNTH_PARAMS: dict[str, float] = {
     # sqft
     "sqft_min":             900,
     "sqft_max":             2_800,
-    # rent (gross annual yield applied to price)
-    "gross_yield_min":      0.04,
-    "gross_yield_max":      0.09,
-    "rent_floor":           600,
-    # days on market  →  low = max(floor_low, base_low + (1-heat)*cold_spread_low)
-    "dom_base_low":         5,
-    "dom_cold_spread_low":  30,
-    "dom_floor_low":        5,
-    "dom_base_high":        20,
-    "dom_cold_spread_high": 100,
-    "dom_floor_high":       15,
+    # rent → yield compression: yield_mid = base*(yield_norm_price/metro_price)^exponent
+    #         result clamped to [gross_yield_min, gross_yield_max] before per-zip noise
+    "gross_yield_min":       0.04,
+    "gross_yield_max":       0.09,
+    "gross_yield_base":      0.065,  # gross yield at yield_norm_price
+    "yield_norm_price":      400_000,
+    "yield_price_exponent":  0.5,    # sublinear: pricier metros yield less, but not proportionally
+    "yield_noise_std":       0.008,
+    "rent_floor":            600,
+    # days on market → market_speed = heat_weight*heat + income_weight*clip(income/norm, 0, 1.5)
+    #                  dom_low = max(floor_low, base_low + (1-speed)*cold_spread_low)
+    "dom_base_low":          5,
+    "dom_cold_spread_low":   30,
+    "dom_floor_low":         5,
+    "dom_base_high":         20,
+    "dom_cold_spread_high":  100,
+    "dom_floor_high":        15,
+    "dom_heat_weight":       0.7,
+    "dom_income_weight":     0.3,
+    "dom_norm_income":       80_000,
     # homes sold  →  scaled by metro_price / norm_price
-    "sold_norm_price":      400_000,
-    "sold_base_low":        10,
-    "sold_base_high":       150,
-    "sold_floor_low":       2,
-    "sold_floor_high":      10,
-    # yoy appreciation  →  normal(heat * scale + offset, std)
-    "appr_heat_scale":      0.12,
-    "appr_heat_offset":     -0.01,
-    "appr_std":             0.03,
+    "sold_norm_price":       400_000,
+    "sold_base_low":         10,
+    "sold_base_high":        150,
+    "sold_floor_low":        2,
+    "sold_floor_high":       10,
+    # yoy appreciation → metro_trend = N(metro_heat*scale + offset, metro_std)
+    #                    zip_appr    = metro_trend + N(0, zip_residual_std)
+    "appr_heat_scale":       0.12,
+    "appr_heat_offset":      -0.01,
+    "appr_metro_std":        0.02,   # controls how much metros diverge from each other
+    "appr_zip_residual_std": 0.015,  # controls zip scatter within a metro
 }
 
 # ── Data Generation ───────────────────────────────────────────────────────────
 RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
 APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
+
+# ── DataFrame Schema ──────────────────────────────────────────────────────────
+# Contract between the data layer and the rest of the app.
+# validate_schema() in data_loader.py enforces this on both synthetic and real feeds.
+DATAFRAME_SCHEMA: dict[str, type] = {
+    "zip_code":                str,
+    "metro":                   str,
+    "median_sale_price":       float,
+    "price_per_sqft":          float,
+    "days_on_market":          int,
+    "homes_sold":              int,
+    "median_household_income": float,
+    "fair_market_rent_2br":    float,
+    "yoy_appreciation":        float,
+}
 
 # ── Model Parameters ──────────────────────────────────────────────────────────
 # Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py

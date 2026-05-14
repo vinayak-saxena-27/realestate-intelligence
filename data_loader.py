@@ -4,6 +4,7 @@ import streamlit as st
 
 from config import (
     APPR_ROUND_DP,
+    DATAFRAME_SCHEMA,
     FALLBACK_ANCHOR,
     METRO_ANCHORS,
     METROS,
@@ -13,86 +14,137 @@ from config import (
     SYNTH_PARAMS,
 )
 
-def _zip_row(rng: np.random.Generator, metro: str, zip_code: str, anchor: dict) -> dict:
-    p            = SYNTH_PARAMS
+
+def validate_schema(df: pd.DataFrame) -> None:
+    missing = set(DATAFRAME_SCHEMA) - set(df.columns)
+    if missing:
+        raise ValueError(f"DataFrame is missing required columns: {missing}")
+    for col, expected_type in DATAFRAME_SCHEMA.items():
+        if expected_type in (int, float):
+            if not pd.api.types.is_numeric_dtype(df[col]):
+                raise TypeError(f"Column '{col}': expected numeric, got {df[col].dtype}")
+        elif expected_type is str:
+            if not pd.api.types.is_string_dtype(df[col]):
+                raise TypeError(f"Column '{col}': expected string/object, got {df[col].dtype}")
+
+
+def _build_metro_block(
+    rng: np.random.Generator,
+    metro: str,
+    zip_codes: list[str],
+    anchor: dict,
+    p: dict,
+) -> dict[str, list]:
+    n            = len(zip_codes)
     metro_price  = anchor["median_price"]
     metro_income = anchor["median_income"]
 
-    # Single heat index drives all correlated market signals
-    heat = rng.uniform(p["heat_min"], p["heat_max"])
+    # Heat: one draw per zip
+    heat = rng.uniform(p["heat_min"], p["heat_max"], size=n)
 
-    # Income: metro-anchored with zip-level spread
-    median_household_income = max(
+    # Income: zip-level spread around the metro median
+    income = np.maximum(
         p["income_floor"],
-        round(rng.normal(metro_income, metro_income * p["income_spread_pct"]), PRICE_ROUND_DP),
+        np.round(rng.normal(metro_income, metro_income * p["income_spread_pct"], size=n), PRICE_ROUND_DP),
     )
 
-    # Price: metro-anchored, nudged by local income deviation
-    income_ratio      = median_household_income / metro_income
-    median_sale_price = max(
+    # Price: anchored to metro, nudged by local income deviation
+    income_ratio = income / metro_income
+    price = np.maximum(
         p["price_floor"],
-        round(metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"]), PRICE_ROUND_DP),
+        np.round(metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"], size=n), PRICE_ROUND_DP),
     )
 
-    # Sqft generated first; price_per_sqft derived from it (not backwards)
-    sqft           = rng.uniform(p["sqft_min"], p["sqft_max"])
-    price_per_sqft = round(median_sale_price / sqft, PRICE_ROUND_DP)
+    # Sqft first; price_per_sqft derived (not the other way around)
+    sqft           = rng.uniform(p["sqft_min"], p["sqft_max"], size=n)
+    price_per_sqft = np.round(price / sqft, PRICE_ROUND_DP)
 
-    # Rent anchored to price via gross yield
-    fair_market_rent_2br = max(
+    # Yield compression: pricier metros produce lower gross yields
+    # yield_mid = base * (norm_price / metro_price)^exponent, then clamped
+    yield_mid = np.clip(
+        p["gross_yield_base"] * (p["yield_norm_price"] / metro_price) ** p["yield_price_exponent"],
+        p["gross_yield_min"],
+        p["gross_yield_max"],
+    )
+    gross_yield = np.clip(
+        rng.normal(yield_mid, p["yield_noise_std"], size=n),
+        p["gross_yield_min"],
+        p["gross_yield_max"],
+    )
+    rent = np.maximum(
         p["rent_floor"],
-        round((median_sale_price * rng.uniform(p["gross_yield_min"], p["gross_yield_max"])) / 12, PRICE_ROUND_DP),
+        np.round(price * gross_yield / 12, PRICE_ROUND_DP),
     )
 
-    # Days on market: hotter market → faster sales
-    dom_low        = max(p["dom_floor_low"],  int(p["dom_base_low"]  + (1 - heat) * p["dom_cold_spread_low"]))
-    dom_high       = max(p["dom_floor_high"], int(p["dom_base_high"] + (1 - heat) * p["dom_cold_spread_high"]))
-    days_on_market = int(rng.integers(dom_low, dom_high + 1))
+    # DOM: inversely correlated with heat AND income
+    # income_norm clips at 1.5 so ultra-high-income zips don't collapse DOM to zero alone
+    income_norm  = np.clip(income / p["dom_norm_income"], 0.0, 1.5)
+    market_speed = p["dom_heat_weight"] * heat + p["dom_income_weight"] * income_norm
+    cold_factor  = np.maximum(0.0, 1.0 - market_speed)
+    dom_low  = np.maximum(
+        p["dom_floor_low"],
+        (p["dom_base_low"]  + cold_factor * p["dom_cold_spread_low"]).astype(int),
+    )
+    dom_high = np.maximum(
+        p["dom_floor_high"],
+        (p["dom_base_high"] + cold_factor * p["dom_cold_spread_high"]).astype(int),
+    )
+    dom = rng.integers(dom_low, dom_high + 1)  # numpy supports per-element [low, high)
 
-    # Homes sold: cheaper markets transact more frequently
+    # Homes sold: same price-scaled bounds for every zip in this metro
     price_factor = metro_price / p["sold_norm_price"]
-    sold_low     = max(p["sold_floor_low"],  int(p["sold_base_low"]  / price_factor))
-    sold_high    = max(p["sold_floor_high"], int(p["sold_base_high"] / price_factor))
-    homes_sold   = int(rng.integers(sold_low, sold_high + 1))
+    sold_low  = max(p["sold_floor_low"],  int(p["sold_base_low"]  / price_factor))
+    sold_high = max(p["sold_floor_high"], int(p["sold_base_high"] / price_factor))
+    homes_sold = rng.integers(sold_low, sold_high + 1, size=n)
 
-    # YoY appreciation: hotter markets appreciate faster
-    yoy_appreciation = round(
-        rng.normal(heat * p["appr_heat_scale"] + p["appr_heat_offset"], p["appr_std"]), APPR_ROUND_DP
+    # Appreciation: metro-level trend (one draw) + zip-level residual (n draws)
+    # This ensures zips within a metro move together while still diverging slightly
+    metro_heat  = rng.uniform(p["heat_min"], p["heat_max"])
+    metro_trend = rng.normal(
+        metro_heat * p["appr_heat_scale"] + p["appr_heat_offset"],
+        p["appr_metro_std"],
     )
+    appr = np.round(metro_trend + rng.normal(0.0, p["appr_zip_residual_std"], size=n), APPR_ROUND_DP)
 
     return {
-        "zip_code":                zip_code,
-        "metro":                   metro,
-        "median_sale_price":       median_sale_price,
-        "price_per_sqft":          price_per_sqft,
-        "days_on_market":          days_on_market,
-        "homes_sold":              homes_sold,
-        "median_household_income": median_household_income,
-        "fair_market_rent_2br":    fair_market_rent_2br,
-        "yoy_appreciation":        yoy_appreciation,
+        "zip_code":                list(zip_codes),
+        "metro":                   [metro] * n,
+        "median_sale_price":       price.tolist(),
+        "price_per_sqft":          price_per_sqft.tolist(),
+        "days_on_market":          dom.tolist(),
+        "homes_sold":              homes_sold.tolist(),
+        "median_household_income": income.tolist(),
+        "fair_market_rent_2br":    rent.tolist(),
+        "yoy_appreciation":        appr.tolist(),
     }
 
 
-@st.cache_data
-def generate_synthetic_data() -> pd.DataFrame:
-    """Synthetic stand-in for production data. Replace with a real feed (MLS, Zillow API, ATTOM, CoreLogic) before going live."""
+def _build_dataframe() -> pd.DataFrame:
+    """Pure generation — no Streamlit dependency. Swap for a real data feed without touching the cache layer."""
     rng = np.random.default_rng(RNG_SEED)
+    p   = SYNTH_PARAMS
 
-    rows = []
-    for metro in METROS:
-        anchor = METRO_ANCHORS.get(metro, FALLBACK_ANCHOR)
-        for zip_code in METRO_ZIPS[metro]:
-            rows.append(_zip_row(rng, metro, zip_code, anchor))
-
-    df = pd.DataFrame(rows)
+    blocks = [
+        _build_metro_block(rng, metro, METRO_ZIPS[metro], METRO_ANCHORS.get(metro, FALLBACK_ANCHOR), p)
+        for metro in METROS
+    ]
+    df = pd.concat([pd.DataFrame(b) for b in blocks], ignore_index=True)
 
     expected = sum(len(v) for v in METRO_ZIPS.values())
     assert df.shape[0] == expected, f"Expected {expected} rows, got {df.shape[0]}"
     assert df.isnull().sum().sum() == 0, "DataFrame contains NaN values"
-    assert (df["median_sale_price"] >= SYNTH_PARAMS["price_floor"]).all(), "median_sale_price below price_floor"
-    assert (df["fair_market_rent_2br"] >= SYNTH_PARAMS["rent_floor"]).all(), "fair_market_rent_2br below rent_floor"
-    assert (df["median_household_income"] >= SYNTH_PARAMS["income_floor"]).all(), "median_household_income below income_floor"
+    assert (df["median_sale_price"] >= p["price_floor"]).all(), "median_sale_price below price_floor"
+    assert (df["fair_market_rent_2br"] >= p["rent_floor"]).all(), "fair_market_rent_2br below rent_floor"
+    assert (df["median_household_income"] >= p["income_floor"]).all(), "median_household_income below income_floor"
 
+    return df
+
+
+@st.cache_data
+def generate_synthetic_data() -> pd.DataFrame:
+    """Cached Streamlit entry point. To swap in a real feed, replace _build_dataframe()."""
+    df = _build_dataframe()
+    validate_schema(df)
     return df
 
 
