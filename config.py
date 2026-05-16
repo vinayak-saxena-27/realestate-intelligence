@@ -107,17 +107,26 @@ SYNTH_PARAMS: dict[str, float] = {
     "appr_heat_offset":      -0.01,
     "appr_metro_std":        0.02,   # controls how much metros diverge from each other
     "appr_zip_residual_std": 0.015,  # controls zip scatter within a metro
+    # time-series monthly variation (applied on top of cross-sectional base values)
+    "monthly_price_noise_std":  0.008,  # multiplicative: price_t ~ trend_t × N(1, std)
+    "monthly_dom_noise_std":    3.0,    # additive noise on DOM per month (days)
+    "monthly_sold_noise_std":   0.08,   # multiplicative noise on homes_sold per month
+    "seasonal_dom_amplitude":   5.0,    # DOM peak-to-trough swing (days); peak in Jan
+    "seasonal_sold_amplitude":  0.20,   # homes-sold fractional swing; peak in Apr
 }
 
 # ── Data Generation ───────────────────────────────────────────────────────────
 RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
 APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
+N_MONTHS: int       = 24          # months of history per zip code
+DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
 # validate_schema() in data_loader.py enforces this on both synthetic and real feeds.
 DATAFRAME_SCHEMA: dict[str, type] = {
+    "month":                   str,
     "zip_code":                str,
     "metro":                   str,
     "median_sale_price":       float,
