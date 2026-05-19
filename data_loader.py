@@ -7,13 +7,13 @@ from config import (
     DATA_END_MONTH,
     DATAFRAME_SCHEMA,
     FALLBACK_ANCHOR,
-    METRO_ANCHORS,
     METROS,
-    METRO_ZIPS,
+    METRO_ZIP_BASE,
     N_MONTHS,
     PRICE_ROUND_DP,
     RNG_SEED,
     SYNTH_PARAMS,
+    ZIP_CODES_PER_METRO,
 )
 
 
@@ -200,7 +200,7 @@ def _expand_to_panel(
 
 
 def generate_synthetic_data() -> pd.DataFrame:
-    """Build the panel dataset: 200 zip codes × 24 months = 4 800 rows.
+    """Build the panel dataset: 10 metros × 20 zips × 24 months = 4 800 rows.
 
     No arguments. Uses np.random.default_rng(RNG_SEED) for full reproducibility.
     Returns a validated DataFrame matching DATAFRAME_SCHEMA sorted by
@@ -212,15 +212,19 @@ def generate_synthetic_data() -> pd.DataFrame:
 
     blocks = []
     for metro in METROS:
-        zip_codes = METRO_ZIPS[metro]
-        anchor    = METRO_ANCHORS.get(metro, FALLBACK_ANCHOR)
-        zp        = _draw_zip_params(rng, anchor, len(zip_codes), p)
-        block     = _expand_to_panel(rng, zip_codes, metro, zp, months, p)
+        zip_codes  = [str(METRO_ZIP_BASE[metro] + i).zfill(5) for i in range(ZIP_CODES_PER_METRO)]
+        metro_data = METROS.get(metro, FALLBACK_ANCHOR)
+        anchor     = {
+            "median_price":  sum(metro_data["median_price_range"]) / 2,
+            "median_income": metro_data["median_income"],
+        }
+        zp    = _draw_zip_params(rng, anchor, len(zip_codes), p)
+        block = _expand_to_panel(rng, zip_codes, metro, zp, months, p)
         blocks.append(pd.DataFrame(block))
 
     df = pd.concat(blocks, ignore_index=True)
 
-    expected_rows = sum(len(v) for v in METRO_ZIPS.values()) * N_MONTHS
+    expected_rows = len(METROS) * ZIP_CODES_PER_METRO * N_MONTHS
     assert df.shape[0] == expected_rows,             f"Expected {expected_rows} rows, got {df.shape[0]}"
     assert df.isnull().sum().sum() == 0,             "DataFrame contains NaN values"
     assert (df["median_sale_price"] >= p["price_floor"]).all()
