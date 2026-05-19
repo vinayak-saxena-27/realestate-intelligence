@@ -197,8 +197,14 @@ GRADE_THRESHOLDS: dict[str, int] = {
     "F":  0,
 }
 
-# ── Scoring Weights ───────────────────────────────────────────────────────────
-SCORING_WEIGHTS: dict[str, float] = {
+# ── Feature Engineering & Scoring Weights ────────────────────────────────────
+NEIGHBORHOOD_WEIGHTS: dict[str, float] = {
+    "income":      0.40,
+    "education":   0.30,
+    "home_value":  0.30,
+}
+
+INVESTMENT_SCORE_WEIGHTS: dict[str, float] = {
     "appreciation": 0.25,
     "yield":        0.20,
     "heat":         0.15,
@@ -207,7 +213,16 @@ SCORING_WEIGHTS: dict[str, float] = {
     "net_yield":    0.10,
 }
 
-assert abs(sum(SCORING_WEIGHTS.values()) - 1.0) < 1e-9, "Scoring weights must sum to 1.0"
+HEAT_INDEX_COMPONENTS: dict[str, float] = {
+    "days_on_market": 0.35,
+    "homes_sold":     0.30,
+    "price_velocity": 0.20,
+    "list_to_sale":   0.15,
+}
+
+assert abs(sum(NEIGHBORHOOD_WEIGHTS.values())      - 1.0) < 1e-9, "NEIGHBORHOOD_WEIGHTS must sum to 1.0"
+assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values())  - 1.0) < 1e-9, "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
+assert abs(sum(HEAT_INDEX_COMPONENTS.values())     - 1.0) < 1e-9, "HEAT_INDEX_COMPONENTS must sum to 1.0"
 assert METRO_ZIP_BASE.keys() == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
 assert list(GRADE_THRESHOLDS.values()) == sorted(GRADE_THRESHOLDS.values(), reverse=True), \
     "GRADE_THRESHOLDS must be ordered high → low"
