@@ -371,12 +371,88 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     return df, pop_stats
 
 
+def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
+    """
+    Load and validate a real estate CSV.
+    Returns the same (df, pop_stats) tuple as generate_synthetic_data().
+    Raises ValueError with a clear message if required columns are missing.
+    """
+    df = pd.read_csv(file_path)
+
+    # Reuse existing validator: required columns, month format, zip/month duplicates
+    validate_csv(df)
+
+    # ── Type coercion — bad CSV data should fail loudly ──────────────────────
+    numeric_cols = [
+        "median_sale_price", "price_per_sqft", "days_on_market",
+        "homes_sold", "median_household_income", "fair_market_rent_2br",
+    ]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    if df[numeric_cols].isnull().any().any():
+        bad = df[numeric_cols].isnull().sum()
+        raise ValueError(
+            f"Non-numeric values found after coercion: {bad[bad > 0].to_dict()}"
+        )
+
+    # Zip code: string, zero-padded to 5 digits
+    df["zip_code"] = df["zip_code"].astype(str).str.zfill(5)
+
+    # Metro must be in METROS — fail loud, not a silent row-drop
+    unknown = set(df["metro"].unique()) - set(METROS.keys())
+    if unknown:
+        raise ValueError(f"Unknown metro values in CSV: {unknown}")
+
+    # ── Optional column defaults ─────────────────────────────────────────────
+    if "bachelor_rate" not in df.columns:
+        df["bachelor_rate"] = 0.30
+
+    if "list_to_sale_ratio" not in df.columns:
+        df["list_to_sale_ratio"] = 0.97
+
+    if "inventory_level" not in df.columns:
+        df["inventory_level"] = 100
+
+    if "appreciation_rate" not in df.columns:
+        if "median_sale_price_12m_ago" in df.columns:
+            p_12m = pd.to_numeric(df["median_sale_price_12m_ago"], errors="coerce").fillna(
+                df["median_sale_price"]
+            )
+            df["appreciation_rate"] = np.where(
+                p_12m > 0,
+                (df["median_sale_price"] - p_12m) / p_12m * 100,
+                0.0,
+            )
+        else:
+            df["appreciation_rate"] = 0.0
+
+    if "median_list_price" not in df.columns:
+        df["median_list_price"] = np.round(
+            df["median_sale_price"] * df["list_to_sale_ratio"], PRICE_ROUND_DP
+        )
+
+    # median_sale_price_12m_ago required by engineer_features()
+    if "median_sale_price_12m_ago" not in df.columns:
+        df["median_sale_price_12m_ago"] = np.round(
+            df["median_sale_price"] / (1 + df["appreciation_rate"] / 100), PRICE_ROUND_DP
+        )
+
+    # price_history: flat 24-repeat when not provided — chart renders, no crash
+    if "price_history" not in df.columns:
+        df["price_history"] = df["median_sale_price"].apply(lambda p: [p] * 24)
+
+    pop_stats = _compute_pop_stats(df)
+    return df, pop_stats
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 # App modules call get_data() for the Streamlit-cached version.
-# No caller should call generate_synthetic_data() directly.
+# No caller should call generate_synthetic_data() or load_csv_data() directly.
 
 @st.cache_data
-def get_data() -> Tuple[pd.DataFrame, dict]:
+def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
+    if file_path is not None:
+        return load_csv_data(file_path)
     return generate_synthetic_data()
 
 
