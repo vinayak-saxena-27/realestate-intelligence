@@ -10,6 +10,7 @@ from config import (
     DAYS_ON_MARKET_RANGE,
     FALLBACK_ANCHOR,
     HOMES_SOLD_RANGE,
+    LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
     METROS,
     METRO_ZIP_BASE,
@@ -248,7 +249,22 @@ def generate_synthetic_data() -> pd.DataFrame:
     assert (df["median_household_income"] >= p["income_floor"]).all()
 
     validate_schema(df)
-    return df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
+    df = df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
+
+    # 12-month lag price: use actual shifted price where available, back-calculate for early months
+    df["median_sale_price_12m_ago"] = df.groupby("zip_code")["median_sale_price"].shift(12)
+    early = df["median_sale_price_12m_ago"].isna()
+    df.loc[early, "median_sale_price_12m_ago"] = np.round(
+        df.loc[early, "median_sale_price"] / (1 + df.loc[early, "yoy_appreciation"]),
+        PRICE_ROUND_DP,
+    )
+
+    # list-to-sale ratio: uniform random within validated range, separate seed for reproducibility
+    lo, hi = LIST_TO_SALE_RATIO_RANGE
+    lts_rng = np.random.default_rng(RNG_SEED + 1)
+    df["list_to_sale_ratio"] = np.round(lts_rng.uniform(lo, hi, size=len(df)), PRICE_ROUND_DP)
+
+    return df
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

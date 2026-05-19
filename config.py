@@ -178,6 +178,8 @@ SYNTH_PARAMS: dict[str, float] = {
     "appr_heat_offset":      -0.01,
     "appr_metro_std":        0.02,   # controls how much metros diverge from each other
     "appr_zip_residual_std": 0.015,  # controls zip scatter within a metro
+    # price_velocity rolling window (months)
+    "velocity_window":           3,
     # time-series monthly variation (applied on top of cross-sectional base values)
     "monthly_price_noise_std":  0.008,  # multiplicative: price_t ~ trend_t × N(1, std)
     "monthly_dom_noise_std":    3.0,    # additive noise on DOM per month (days)
