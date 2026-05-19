@@ -11,7 +11,11 @@ from config import (
     DATA_END_MONTH,
     DATAFRAME_SCHEMA,
     DAYS_ON_MARKET_RANGE,
+    DECLINING_COUNT,
+    DECLINING_METROS,
     HOMES_SOLD_RANGE,
+    HOT_DOM_CEILING,
+    HOT_MARKET_COUNT,
     INVENTORY_LEVEL_RANGE,
     LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
@@ -23,7 +27,10 @@ from config import (
     REQUIRED_CSV_COLUMNS,
     REQUIRED_POP_STAT_KEYS,
     RNG_SEED,
+    SLOW_DOM_FLOOR,
+    SLOW_MARKET_COUNT,
     SYNTH_PARAMS,
+    TOP_APPRECIATING_COUNT,
     ZIP_CODES_PER_METRO,
 )
 
@@ -91,6 +98,24 @@ def _month_range(end: str, n: int) -> list[str]:
     return [(end_period - (n - 1 - i)).strftime("%Y-%m") for i in range(n)]
 
 
+def _compute_dom(
+    heat: np.ndarray,
+    income: np.ndarray,
+    metro_income: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Vectorized heat + income composite DOM base per zip.
+
+    heat=1 → ~8 days, heat=0 → ~90 days; wealthier areas sell 10-20% faster.
+    Lognormal noise (sigma=0.25) preserves realistic right-skew.
+    """
+    income_ratio = np.clip(income / metro_income, 0.5, 2.0)
+    base_dom     = 90.0 - heat * 82.0                               # [8, 90]
+    income_adj   = np.maximum(base_dom * (1.0 - (income_ratio - 1.0) * 0.15), 3.0)
+    dom          = rng.lognormal(mean=np.log(income_adj), sigma=0.25)
+    return np.clip(np.round(dom).astype(int), *DAYS_ON_MARKET_RANGE)
+
+
 def _draw_zip_params(
     rng: np.random.Generator,
     anchor: dict,
@@ -147,18 +172,8 @@ def _draw_zip_params(
         APPR_ROUND_DP,
     )
 
-    # DOM base: inversely correlated with heat and income
-    income_norm  = np.clip(income / p["dom_norm_income"], 0.0, 1.5)
-    market_speed = p["dom_heat_weight"] * heat + p["dom_income_weight"] * income_norm
-    cold_factor  = np.maximum(0.0, 1.0 - market_speed)
-    dom_low  = np.maximum(
-        p["dom_floor_low"],
-        (p["dom_base_low"]  + cold_factor * p["dom_cold_spread_low"]).astype(int),
-    )
-    dom_high = np.maximum(
-        p["dom_floor_high"],
-        (p["dom_base_high"] + cold_factor * p["dom_cold_spread_high"]).astype(int),
-    )
+    # DOM base: heat + income composite (replaces bounds-based approach)
+    dom_base = _compute_dom(heat, income, metro_income, rng)
 
     # Homes-sold base: price-scaled bounds, same for all zips in this metro
     price_factor = metro_price / p["sold_norm_price"]
@@ -192,7 +207,7 @@ def _draw_zip_params(
         "gross_yield":       gross_yield,
         "yoy_appr":          yoy_appr,
         "monthly_rate":      (1.0 + yoy_appr) ** (1.0 / 12) - 1.0,
-        "dom_base":          rng.integers(dom_low, dom_high + 1),           # (n,)
+        "dom_base":          dom_base,
         "sold_base":         rng.integers(sold_low_s, sold_high_s + 1, size=n).astype(float),
         "list_to_sale_ratio": list_to_sale_ratio,
         "bachelor_rate":      bachelor_rate,
@@ -294,6 +309,58 @@ def _expand_to_panel(
     }
 
 
+def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Apply deliberate market patterns after base generation. Modifies df in place.
+
+    Operates at zip level so appreciation_rate stays uniform per zip and DOM
+    changes apply to all months of the selected zips.
+    Called after all base assertions pass — final step before _compute_pop_stats().
+    """
+    # Reset any naturally negative rates so injection is the sole source of negatives
+    neg_mask = df["appreciation_rate"] < 0
+    df.loc[neg_mask, "appreciation_rate"] = df.loc[neg_mask, "appreciation_rate"].abs()
+
+    # Top TOP_APPRECIATING_COUNT zips — boost by 1.4×, cap at 25%
+    zip_appr  = df.groupby("zip_code")["appreciation_rate"].first()
+    top_zips  = zip_appr.nlargest(TOP_APPRECIATING_COUNT).index
+    top_mask  = df["zip_code"].isin(top_zips)
+    df.loc[top_mask, "appreciation_rate"] = (
+        df.loc[top_mask, "appreciation_rate"] * 1.4
+    ).clip(upper=25.0)
+
+    # DECLINING_COUNT zips concentrated in DECLINING_METROS — set to −2% … −5%
+    zip_pool     = df[df["metro"].isin(DECLINING_METROS)]["zip_code"].unique()
+    decline_zips = rng.choice(zip_pool, size=min(DECLINING_COUNT, len(zip_pool)), replace=False)
+    decline_rates = np.round(rng.uniform(-5.0, -2.0, size=len(decline_zips)), APPR_ROUND_DP)
+    zip_rate_map  = dict(zip(decline_zips, decline_rates))
+    decline_mask  = df["zip_code"].isin(decline_zips)
+    df.loc[decline_mask, "appreciation_rate"] = df.loc[decline_mask, "zip_code"].map(zip_rate_map)
+
+    # Determine hot/slow target zips before DOM injection
+    zip_mean_dom = df.groupby("zip_code")["days_on_market"].mean()
+    hot_zips     = zip_mean_dom.nsmallest(HOT_MARKET_COUNT).index
+    slow_zips    = zip_mean_dom.nlargest(SLOW_MARKET_COUNT).index
+
+    # HOT_MARKET_COUNT zips — all DOM rows forced below HOT_DOM_CEILING
+    hot_mask = df["zip_code"].isin(hot_zips)
+    df.loc[hot_mask, "days_on_market"] = rng.integers(3, HOT_DOM_CEILING, size=hot_mask.sum())
+
+    # Cap other (non-hot, non-slow) zips at SLOW_DOM_FLOOR so injection is the sole
+    # source of DOM > SLOW_DOM_FLOOR — the new _compute_dom() formula can naturally
+    # produce high DOM for cold markets, which would break the exact-count AC otherwise.
+    other_mask = ~df["zip_code"].isin(hot_zips) & ~df["zip_code"].isin(slow_zips)
+    overflow   = other_mask & (df["days_on_market"] > SLOW_DOM_FLOOR)
+    df.loc[overflow, "days_on_market"] = SLOW_DOM_FLOOR
+
+    # SLOW_MARKET_COUNT zips — all DOM rows forced above SLOW_DOM_FLOOR
+    slow_mask = df["zip_code"].isin(slow_zips)
+    df.loc[slow_mask, "days_on_market"] = rng.integers(
+        SLOW_DOM_FLOOR + 1, 121, size=slow_mask.sum()
+    )
+
+    return df
+
+
 def _compute_pop_stats(df: pd.DataFrame) -> dict:
     """Compute population stats from raw data. Called once inside generate_synthetic_data()."""
     gross_yield  = df["fair_market_rent_2br"] * 12 / df["median_sale_price"] * 100
@@ -366,6 +433,9 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
         df.loc[early, "median_sale_price"] / (1 + df.loc[early, "appreciation_rate"] / 100),
         PRICE_ROUND_DP,
     )
+
+    # Inject deliberate market patterns — final step before pop_stats
+    df = _inject_market_patterns(df, rng)
 
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats
