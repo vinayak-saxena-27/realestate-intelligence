@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import streamlit as st
 
 from config import (
     HEAT_INDEX_COMPONENTS,
@@ -73,25 +74,82 @@ def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
 
-if __name__ == "__main__":
-    from data_loader import generate_synthetic_data
+_REQUIRED_COLUMNS = [
+    "median_sale_price",
+    "median_sale_price_12m_ago",
+    "fair_market_rent_2br",
+    "median_household_income",
+    "days_on_market",
+    "homes_sold",
+    "list_to_sale_ratio",
+]
 
-    df = generate_synthetic_data()
+
+@st.cache_data
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Run full feature engineering pipeline on raw data.
+
+    Returns df with 6 additional feature columns. Input df is never mutated.
+    """
+    missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    df = df.copy()
     df["yoy_appreciation"]  = compute_yoy_appreciation(df)
     df["price_velocity"]    = compute_price_velocity(df)
     df["market_heat_index"] = compute_market_heat_index(df)
+    df["gross_rental_yield"] = compute_gross_rental_yield(df)
+    df["net_rental_yield"]   = compute_net_rental_yield(df)
+    df["neighborhood_score"] = compute_neighborhood_score(df)
+    return df
 
-    df["gross_rental_yield"]  = compute_gross_rental_yield(df)
-    df["net_rental_yield"]    = compute_net_rental_yield(df)
-    df["neighborhood_score"]  = compute_neighborhood_score(df)
 
-    assert (df["market_heat_index"].between(0, 100)).all(),    "market_heat_index out of [0, 100]"
-    assert (df["gross_rental_yield"].between(2, 12)).mean() > 0.95, ">5% of rows outside [2,12]"
-    assert (df["net_rental_yield"] == df["gross_rental_yield"] * NET_YIELD_EXPENSE_RATIO).all(), \
-        "net_rental_yield mismatch"
-    assert (df["neighborhood_score"].between(0, 100)).all(),   "neighborhood_score out of [0, 100]"
+def get_population_stats(df: pd.DataFrame) -> dict:
+    """Return population-level medians for narrative comparison."""
+    return {
+        "median_yoy_appreciation":  df["yoy_appreciation"].median(),
+        "median_gross_rental_yield": df["gross_rental_yield"].median(),
+        "median_market_heat_index": df["market_heat_index"].median(),
+        "median_neighborhood_score": df["neighborhood_score"].median(),
+        "median_days_on_market":    df["days_on_market"].median(),
+    }
 
-    print("--- PRD 1 features ---")
+
+if __name__ == "__main__":
+    from data_loader import generate_synthetic_data
+
+    raw = generate_synthetic_data()
+    feature_cols = [
+        "yoy_appreciation", "price_velocity", "market_heat_index",
+        "gross_rental_yield", "net_rental_yield", "neighborhood_score",
+    ]
+
+    # engineer_features must not mutate the input
+    df = engineer_features(raw)
+    assert set(feature_cols).issubset(df.columns), "Missing feature columns"
+    assert df.isnull().sum().sum() == 0, "NaN values in engineered df"
+    assert all(c in raw.columns for c in raw.columns), "Input df was mutated"
+
+    # determinism check
+    df2 = engineer_features(raw)
+    for col in feature_cols:
+        assert (df[col] == df2[col]).all(), f"{col} is non-deterministic"
+
+    # ValueError on missing column
+    try:
+        engineer_features(raw.drop(columns=["median_sale_price"]))
+        raise AssertionError("Should have raised ValueError")
+    except ValueError as e:
+        print(f"ValueError correctly raised: {e}")
+
+    # range assertions
+    assert (df["market_heat_index"].between(0, 100)).all()
+    assert (df["gross_rental_yield"].between(2, 12)).mean() > 0.95
+    assert (df["net_rental_yield"] == df["gross_rental_yield"] * NET_YIELD_EXPENSE_RATIO).all()
+    assert (df["neighborhood_score"].between(0, 100)).all()
+
+    print("\n--- PRD 1 features ---")
     for feat in ["yoy_appreciation", "price_velocity", "market_heat_index"]:
         s = df[feat].agg(["min", "max", "mean"])
         print(f"{feat:24s}  min={s['min']:8.4f}  max={s['max']:8.4f}  mean={s['mean']:8.4f}")
@@ -103,3 +161,9 @@ if __name__ == "__main__":
 
     print("\nneighborhood_score describe:")
     print(df["neighborhood_score"].describe().to_string())
+
+    pop = get_population_stats(df)
+    print("\npopulation stats:")
+    for k, v in pop.items():
+        print(f"  {k}: {v:.4f}")
+    assert len(pop) >= 5 and all(isinstance(v, float) for v in pop.values())
