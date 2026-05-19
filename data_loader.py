@@ -12,6 +12,7 @@ from config import (
     DATAFRAME_SCHEMA,
     DAYS_ON_MARKET_RANGE,
     HOMES_SOLD_RANGE,
+    INVENTORY_LEVEL_RANGE,
     LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
     METROS,
@@ -164,15 +165,38 @@ def _draw_zip_params(
     sold_low_s   = max(p["sold_floor_low"],  int(p["sold_base_low"]  / price_factor))
     sold_high_s  = max(p["sold_floor_high"], int(p["sold_base_high"] / price_factor))
 
+    # list_to_sale_ratio: heat-correlated — hotter markets push ratio toward/above 1.0
+    list_to_sale_ratio = np.clip(
+        rng.normal(0.97 + heat * 0.06, 0.02, size=n),
+        *LIST_TO_SALE_RATIO_RANGE,
+    )
+
+    # bachelor_rate: positively correlated with income (income_ratio already computed above)
+    bachelor_rate = np.clip(
+        rng.normal(income_ratio * 0.4, 0.08, size=n),
+        *BACHELOR_RATE_RANGE,
+    )
+
+    # inventory_level: inversely correlated with heat — hot markets have low supply
+    lo_inv, hi_inv = INVENTORY_LEVEL_RANGE
+    inv_mid = lo_inv + (1.0 - heat) * (hi_inv - lo_inv)
+    inventory_level = np.clip(
+        np.round(rng.normal(inv_mid, 40.0, size=n)).astype(int),
+        lo_inv, hi_inv,
+    )
+
     return {
-        "income":       income,
-        "sqft":         sqft,
-        "price_latest": price_latest,
-        "gross_yield":  gross_yield,
-        "yoy_appr":     yoy_appr,
-        "monthly_rate": (1.0 + yoy_appr) ** (1.0 / 12) - 1.0,
-        "dom_base":     rng.integers(dom_low, dom_high + 1),                        # (n,)
-        "sold_base":    rng.integers(sold_low_s, sold_high_s + 1, size=n).astype(float),
+        "income":            income,
+        "sqft":              sqft,
+        "price_latest":      price_latest,
+        "gross_yield":       gross_yield,
+        "yoy_appr":          yoy_appr,
+        "monthly_rate":      (1.0 + yoy_appr) ** (1.0 / 12) - 1.0,
+        "dom_base":          rng.integers(dom_low, dom_high + 1),           # (n,)
+        "sold_base":         rng.integers(sold_low_s, sold_high_s + 1, size=n).astype(float),
+        "list_to_sale_ratio": list_to_sale_ratio,
+        "bachelor_rate":      bachelor_rate,
+        "inventory_level":    inventory_level,
     }
 
 
@@ -231,6 +255,18 @@ def _expand_to_panel(
         *HOMES_SOLD_RANGE,
     )
 
+    # ── median_list_price ──────────────────────────────────────────────────────
+    # Applies the zip-level list_to_sale_ratio to each month's price
+    median_list_price_matrix = np.round(
+        price_matrix * zp["list_to_sale_ratio"][np.newaxis, :],
+        PRICE_ROUND_DP,
+    )
+
+    # ── price_history ─────────────────────────────────────────────────────────
+    # One list of 24 floats per zip (oldest → newest); same value repeated for
+    # every month row belonging to that zip — get_price_history_df() unpacks it.
+    price_histories = [price_matrix[:, i].tolist() for i in range(n)]
+
     # ── Index columns ─────────────────────────────────────────────────────────
     # np.repeat gives [month0]*n, [month1]*n, ... — aligns with row-major matrix flatten
     months_col = np.repeat(months, n)
@@ -245,22 +281,27 @@ def _expand_to_panel(
         "price_per_sqft":          ppsqft_matrix.flatten().tolist(),
         "days_on_market":          dom_matrix.flatten().tolist(),
         "homes_sold":              sold_matrix.flatten().tolist(),
-        "median_household_income": np.tile(zp["income"],   (n_months, 1)).flatten().tolist(),
+        "median_household_income": np.tile(zp["income"],            (n_months, 1)).flatten().tolist(),
         "fair_market_rent_2br":    rent_matrix.flatten().tolist(),
-        # Internal synthetic rate (decimal, e.g. 0.08). Renamed from yoy_appreciation
-        # to avoid colliding with the percentage-scale column engineer_features() produces.
-        "_yoy_appr_rate":          np.tile(zp["yoy_appr"], (n_months, 1)).flatten().tolist(),
+        # appreciation_rate in percentage points (e.g. 8.0 for 8%); engineer_features()
+        # produces yoy_appreciation from the 12m-lag price — these are parallel columns.
+        "appreciation_rate":       np.tile(zp["yoy_appr"] * 100,    (n_months, 1)).flatten().tolist(),
+        "list_to_sale_ratio":      np.tile(zp["list_to_sale_ratio"], (n_months, 1)).flatten().tolist(),
+        "bachelor_rate":           np.tile(zp["bachelor_rate"],      (n_months, 1)).flatten().tolist(),
+        "inventory_level":         np.tile(zp["inventory_level"],    (n_months, 1)).flatten().tolist(),
+        "median_list_price":       median_list_price_matrix.flatten().tolist(),
+        "price_history":           price_histories * n_months,
     }
 
 
 def _compute_pop_stats(df: pd.DataFrame) -> dict:
     """Compute population stats from raw data. Called once inside generate_synthetic_data()."""
     gross_yield  = df["fair_market_rent_2br"] * 12 / df["median_sale_price"] * 100
-    metro_appr   = df.groupby("metro")["_yoy_appr_rate"].mean() * 100
+    metro_appr   = df.groupby("metro")["appreciation_rate"].mean()
     metro_yield  = gross_yield.groupby(df["metro"]).mean()
 
     pop_stats = {
-        "median_yoy_appreciation":   float((df["_yoy_appr_rate"] * 100).median()),
+        "median_yoy_appreciation":   float(df["appreciation_rate"].median()),
         "median_gross_rental_yield": float(gross_yield.median()),
         "median_market_heat_index":  50.0,   # placeholder — updated after engineer_features()
         "median_neighborhood_score": 50.0,   # placeholder — updated after engineer_features()
@@ -317,37 +358,14 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     df = df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
 
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
-    # zip (where no prior-year row exists), back-calculate from the internal rate column.
-    # Using _yoy_appr_rate (not yoy_appreciation) is intentional: that column holds the decimal
-    # synthetic rate and is never overwritten by engineer_features() — no order-of-ops risk.
+    # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
+    # appreciation_rate is never overwritten by engineer_features() — no order-of-ops risk.
     df["median_sale_price_12m_ago"] = df.groupby("zip_code")["median_sale_price"].shift(12)
     early = df["median_sale_price_12m_ago"].isna()
     df.loc[early, "median_sale_price_12m_ago"] = np.round(
-        df.loc[early, "median_sale_price"] / (1 + df.loc[early, "_yoy_appr_rate"]),
+        df.loc[early, "median_sale_price"] / (1 + df.loc[early, "appreciation_rate"] / 100),
         PRICE_ROUND_DP,
     )
-
-    # ── Synthetic-column RNG registry ────────────────────────────────────────────
-    # Each derived column that needs its own RNG must claim an offset here first.
-    # Never reuse an offset — silent collision produces correlated sequences.
-    #
-    #   RNG_SEED + 0  (main rng above)  — all price/DOM/sold/yield/appreciation draws
-    #   RNG_SEED + 1  (lts_rng below)   — list_to_sale_ratio (uniform per row)
-    #   RNG_SEED + 2  (bach_rng below)  — bachelor_rate (uniform per zip)
-    #   RNG_SEED + 3  → UNCLAIMED — next derived column goes here
-    # ─────────────────────────────────────────────────────────────────────────────
-
-    # list-to-sale ratio: uniform random within validated range
-    lo, hi = LIST_TO_SALE_RATIO_RANGE
-    lts_rng = np.random.default_rng(RNG_SEED + 1)
-    df["list_to_sale_ratio"] = np.round(lts_rng.uniform(lo, hi, size=len(df)), PRICE_ROUND_DP)
-
-    # bachelor_rate: zip-level education proxy, constant across months for the same zip
-    lo_b, hi_b = BACHELOR_RATE_RANGE
-    bach_rng = np.random.default_rng(RNG_SEED + 2)
-    zip_bach = {z: np.round(bach_rng.uniform(lo_b, hi_b), APPR_ROUND_DP)
-                for z in df["zip_code"].unique()}
-    df["bachelor_rate"] = df["zip_code"].map(zip_bach)
 
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats

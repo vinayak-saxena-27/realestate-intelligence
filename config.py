@@ -206,8 +206,9 @@ DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
-# nullable=True columns are absent in synthetic output but may appear in CSV feeds.
+# nullable=True columns may be absent in CSV feeds; all are present in synthetic output.
 # validate_schema() enforces required columns; validate_csv() enforces CSV-specific rules.
+# price_history (list of 24 floats per zip) is intentionally excluded — complex type.
 DATAFRAME_SCHEMA: dict[str, dict] = {
     "month":                   {"type": str,   "nullable": False},
     "zip_code":                {"type": str,   "nullable": False},
@@ -218,13 +219,14 @@ DATAFRAME_SCHEMA: dict[str, dict] = {
     "homes_sold":              {"type": int,   "nullable": False},
     "median_household_income": {"type": float, "nullable": False},
     "fair_market_rent_2br":    {"type": float, "nullable": False},
-    # _yoy_appr_rate: raw synthetic annual rate as a decimal (e.g. 0.08).
-    # Kept for internal data-gen use only — engineer_features() overwrites
-    # the public-facing yoy_appreciation column with a percentage.
-    "_yoy_appr_rate":          {"type": float, "nullable": False},
-    "bachelor_rate":           {"type": float, "nullable": True},
-    "list_to_sale_ratio":      {"type": float, "nullable": True},
-    "inventory_level":         {"type": int,   "nullable": True},
+    # appreciation_rate: annual YoY rate in percentage points (e.g. 8.0 for 8%).
+    # engineer_features() produces yoy_appreciation from median_sale_price_12m_ago;
+    # this column is the raw synthetic seed value used in pop_stats and filtering.
+    "appreciation_rate":       {"type": float, "nullable": False},
+    "bachelor_rate":           {"type": float, "nullable": False},
+    "list_to_sale_ratio":      {"type": float, "nullable": False},
+    "inventory_level":         {"type": int,   "nullable": False},
+    "median_list_price":       {"type": float, "nullable": False},
 }
 
 # ── CSV Column Schema ─────────────────────────────────────────────────────────
@@ -244,6 +246,8 @@ OPTIONAL_CSV_COLUMNS: list[str] = [
     "bachelor_rate",
     "list_to_sale_ratio",
     "inventory_level",
+    "appreciation_rate",
+    "median_list_price",
     "yoy_appreciation",
 ]
 
