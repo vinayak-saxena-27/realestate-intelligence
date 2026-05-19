@@ -9,7 +9,6 @@ from config import (
     DATA_END_MONTH,
     DATAFRAME_SCHEMA,
     DAYS_ON_MARKET_RANGE,
-    FALLBACK_ANCHOR,
     HOMES_SOLD_RANGE,
     LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
@@ -212,7 +211,9 @@ def _expand_to_panel(
         "homes_sold":              sold_matrix.flatten().tolist(),
         "median_household_income": np.tile(zp["income"],   (n_months, 1)).flatten().tolist(),
         "fair_market_rent_2br":    rent_matrix.flatten().tolist(),
-        "yoy_appreciation":        np.tile(zp["yoy_appr"], (n_months, 1)).flatten().tolist(),
+        # Internal synthetic rate (decimal, e.g. 0.08). Renamed from yoy_appreciation
+        # to avoid colliding with the percentage-scale column engineer_features() produces.
+        "_yoy_appr_rate":          np.tile(zp["yoy_appr"], (n_months, 1)).flatten().tolist(),
     }
 
 
@@ -230,7 +231,7 @@ def generate_synthetic_data() -> pd.DataFrame:
     blocks = []
     for metro in METROS:
         zip_codes  = [str(METRO_ZIP_BASE[metro] + i).zfill(5) for i in range(ZIP_CODES_PER_METRO)]
-        metro_data = METROS.get(metro, FALLBACK_ANCHOR)
+        metro_data = METROS[metro]  # metro is always a key of METROS (iterating its keys above)
         anchor     = {
             "median_price":  sum(metro_data["median_price_range"]) / 2,
             "median_income": metro_data["median_income"],
@@ -252,11 +253,14 @@ def generate_synthetic_data() -> pd.DataFrame:
     validate_schema(df)
     df = df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
 
-    # 12-month lag price: use actual shifted price where available, back-calculate for early months
+    # 12-month lag price: actual shifted value where available; for the first 12 months of each
+    # zip (where no prior-year row exists), back-calculate from the internal rate column.
+    # Using _yoy_appr_rate (not yoy_appreciation) is intentional: that column holds the decimal
+    # synthetic rate and is never overwritten by engineer_features() — no order-of-ops risk.
     df["median_sale_price_12m_ago"] = df.groupby("zip_code")["median_sale_price"].shift(12)
     early = df["median_sale_price_12m_ago"].isna()
     df.loc[early, "median_sale_price_12m_ago"] = np.round(
-        df.loc[early, "median_sale_price"] / (1 + df.loc[early, "yoy_appreciation"]),
+        df.loc[early, "median_sale_price"] / (1 + df.loc[early, "_yoy_appr_rate"]),
         PRICE_ROUND_DP,
     )
 

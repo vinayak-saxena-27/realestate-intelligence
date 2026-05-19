@@ -75,6 +75,8 @@ def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
 
 
 _REQUIRED_COLUMNS = [
+    "zip_code",              # groupby key for price_velocity
+    "month",                 # sort key for correct time-series ordering
     "median_sale_price",
     "median_sale_price_12m_ago",
     "fair_market_rent_2br",
@@ -105,14 +107,29 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_POPULATION_STATS_COLUMNS = [
+    "yoy_appreciation", "gross_rental_yield", "market_heat_index",
+    "neighborhood_score", "days_on_market",
+]
+
+
 def get_population_stats(df: pd.DataFrame) -> dict:
-    """Return population-level medians for narrative comparison."""
+    """Return population-level medians for narrative comparison.
+
+    Must be called on the output of engineer_features(), not the raw df.
+    """
+    missing = [c for c in _POPULATION_STATS_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"get_population_stats requires engineered columns — missing: {missing}. "
+            "Call engineer_features(df) first."
+        )
     return {
-        "median_yoy_appreciation":  df["yoy_appreciation"].median(),
+        "median_yoy_appreciation":   df["yoy_appreciation"].median(),
         "median_gross_rental_yield": df["gross_rental_yield"].median(),
-        "median_market_heat_index": df["market_heat_index"].median(),
+        "median_market_heat_index":  df["market_heat_index"].median(),
         "median_neighborhood_score": df["neighborhood_score"].median(),
-        "median_days_on_market":    df["days_on_market"].median(),
+        "median_days_on_market":     df["days_on_market"].median(),
     }
 
 

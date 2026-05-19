@@ -133,7 +133,7 @@ LOGNORMAL_BASE_PRICE: dict[str, float] = {
 }
 
 # ── Synthetic Data Generation Parameters ─────────────────────────────────────
-SYNTH_PARAMS: dict[str, float] = {
+SYNTH_PARAMS: dict[str, int | float] = {
     # heat index (0 = cold market, 1 = hot market)
     "heat_min":             0.2,
     "heat_max":             1.0,
@@ -218,7 +218,10 @@ DATAFRAME_SCHEMA: dict[str, dict] = {
     "homes_sold":              {"type": int,   "nullable": False},
     "median_household_income": {"type": float, "nullable": False},
     "fair_market_rent_2br":    {"type": float, "nullable": False},
-    "yoy_appreciation":        {"type": float, "nullable": False},
+    # _yoy_appr_rate: raw synthetic annual rate as a decimal (e.g. 0.08).
+    # Kept for internal data-gen use only — engineer_features() overwrites
+    # the public-facing yoy_appreciation column with a percentage.
+    "_yoy_appr_rate":          {"type": float, "nullable": False},
     "bachelor_rate":           {"type": float, "nullable": True},
     "list_to_sale_ratio":      {"type": float, "nullable": True},
     "inventory_level":         {"type": int,   "nullable": True},
@@ -226,6 +229,7 @@ DATAFRAME_SCHEMA: dict[str, dict] = {
 
 # ── CSV Column Schema ─────────────────────────────────────────────────────────
 REQUIRED_CSV_COLUMNS: list[str] = [
+    "month",        # required for time-series features (price_velocity, yoy lag)
     "zip_code",
     "metro",
     "median_sale_price",
@@ -316,6 +320,7 @@ assert abs(sum(HEAT_INDEX_COMPONENTS.values())     - 1.0) < 1e-9, "HEAT_INDEX_CO
 assert METRO_ZIP_BASE.keys()        == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
 assert LOGNORMAL_BASE_PRICE.keys()  == METROS.keys(), "LOGNORMAL_BASE_PRICE keys must match METROS keys"
 assert len(CHART_COLORS) == 6, "CHART_COLORS must contain exactly 6 hex strings"
-assert len(SEGMENT_LABELS) == 5, "SEGMENT_LABELS must contain exactly 5 segments"
+assert len(SEGMENT_LABELS) == KMEANS_PARAMS["n_clusters"], \
+    f"SEGMENT_LABELS must have one entry per cluster (n_clusters={KMEANS_PARAMS['n_clusters']})"
 _scores = [g["min_score"] for g in GRADE_THRESHOLDS]
 assert _scores == sorted(_scores, reverse=True), "GRADE_THRESHOLDS must be ordered high → low"
