@@ -445,6 +445,24 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
     return df, pop_stats
 
 
+def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
+    """
+    Convert the price_history list for a single zip into a long-format DataFrame.
+    Returns a DataFrame with columns: month (int 1–24), median_sale_price (float), zip_code (str).
+    Used by create_price_history() in charts.py.
+    Raises ValueError if zip_code is not found in df.
+    """
+    mask = df["zip_code"] == zip_code
+    if not mask.any():
+        raise ValueError(f"zip_code '{zip_code}' not found in DataFrame.")
+    history = df.loc[mask, "price_history"].iloc[0]
+    return pd.DataFrame({
+        "month":             list(range(1, len(history) + 1)),
+        "median_sale_price": history,
+        "zip_code":          zip_code,
+    })
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 # App modules call get_data() for the Streamlit-cached version.
 # No caller should call generate_synthetic_data() or load_csv_data() directly.
