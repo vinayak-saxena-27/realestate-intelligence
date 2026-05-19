@@ -1,10 +1,29 @@
 # ── Color Palette ────────────────────────────────────────────────────────────
-NAVY       = "#1B2A4A"
-GOLD       = "#C9A84C"
-GREEN      = "#2E7D32"
-RED        = "#C62828"
-WHITE      = "#FFFFFF"
-LIGHT_GRAY = "#F5F5F5"
+COLORS: dict[str, str] = {
+    "navy":       "#1B3A5C",
+    "gold":       "#C9A84C",
+    "green":      "#1A7A4A",
+    "red":        "#C0392B",
+    "light_blue": "#EAF2FB",
+    "gray":       "#F5F5F5",
+}
+
+CHART_COLORS: list[str] = [
+    "#1B3A5C",
+    "#2E86AB",
+    "#1A7A4A",
+    "#C9A84C",
+    "#E76F51",
+    "#C0392B",
+]
+
+GRADE_COLORS: dict[str, str] = {
+    "A": "#1A7A4A",
+    "B": "#2E86AB",
+    "C": "#F4A261",
+    "D": "#E76F51",
+    "F": "#C0392B",
+}
 
 # ── Metro Configuration (single source of truth) ─────────────────────────────
 # To add a metro: add one entry here + a base in METRO_ZIP_BASE.
@@ -188,13 +207,33 @@ KMEANS_PARAMS: dict = {
 }
 
 # ── Investment Grade Thresholds ───────────────────────────────────────────────
-# Ordered high → low; scoring.py iterates this to assign a letter grade.
-GRADE_THRESHOLDS: dict[str, int] = {
-    "A": 80,
-    "B": 65,
-    "C": 50,
-    "D": 35,
-    "F":  0,
+# Ordered high → low; scoring.py iterates and returns the first match.
+GRADE_THRESHOLDS: list[dict] = [
+    {"letter": "A", "min_score": 80, "label": "Strong Buy"},
+    {"letter": "B", "min_score": 65, "label": "Buy"},
+    {"letter": "C", "min_score": 50, "label": "Hold"},
+    {"letter": "D", "min_score": 35, "label": "Caution"},
+    {"letter": "F", "min_score":  0, "label": "Avoid"},
+]
+
+# ── Segment Labels ────────────────────────────────────────────────────────────
+SEGMENT_LABELS: dict[str, str] = {
+    "Growth Market":   "High appreciation and fast sales — ideal for capital gains investors.",
+    "Cash Flow Market": "Strong rental yields with moderate price growth — best for income investors.",
+    "Premium Market":  "Top-tier metrics across the board — low supply, high demand, high entry cost.",
+    "Declining Market": "Below-average scores across all indicators — approach with caution.",
+    "Stable Market":   "Balanced metrics with steady, predictable performance — low risk, low volatility.",
+}
+
+# ── App Settings ──────────────────────────────────────────────────────────────
+APP_TITLE: str  = "Real Estate Investment Intelligence"
+APP_ICON:  str  = "🏠"
+PAGE_TITLES: dict[str, str] = {
+    "overview":     "Market Overview",
+    "scoring":      "Investment Scoring",
+    "segments":     "Market Segments",
+    "neighborhood": "Neighborhood Analysis",
+    "data":         "Data Explorer",
 }
 
 # ── Feature Engineering & Scoring Weights ────────────────────────────────────
@@ -224,5 +263,7 @@ assert abs(sum(NEIGHBORHOOD_WEIGHTS.values())      - 1.0) < 1e-9, "NEIGHBORHOOD_
 assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values())  - 1.0) < 1e-9, "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
 assert abs(sum(HEAT_INDEX_COMPONENTS.values())     - 1.0) < 1e-9, "HEAT_INDEX_COMPONENTS must sum to 1.0"
 assert METRO_ZIP_BASE.keys() == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
-assert list(GRADE_THRESHOLDS.values()) == sorted(GRADE_THRESHOLDS.values(), reverse=True), \
-    "GRADE_THRESHOLDS must be ordered high → low"
+assert len(CHART_COLORS) == 6, "CHART_COLORS must contain exactly 6 hex strings"
+assert len(SEGMENT_LABELS) == 5, "SEGMENT_LABELS must contain exactly 5 segments"
+_scores = [g["min_score"] for g in GRADE_THRESHOLDS]
+assert _scores == sorted(_scores, reverse=True), "GRADE_THRESHOLDS must be ordered high → low"
