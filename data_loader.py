@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -6,11 +7,16 @@ from config import (
     APPR_ROUND_DP,
     DATA_END_MONTH,
     DATAFRAME_SCHEMA,
+    DAYS_ON_MARKET_RANGE,
     FALLBACK_ANCHOR,
+    HOMES_SOLD_RANGE,
+    LOGNORMAL_BASE_PRICE,
     METROS,
     METRO_ZIP_BASE,
     N_MONTHS,
+    OPTIONAL_CSV_COLUMNS,
     PRICE_ROUND_DP,
+    REQUIRED_CSV_COLUMNS,
     RNG_SEED,
     SYNTH_PARAMS,
     ZIP_CODES_PER_METRO,
@@ -18,16 +24,27 @@ from config import (
 
 
 def validate_schema(df: pd.DataFrame) -> None:
-    missing = set(DATAFRAME_SCHEMA) - set(df.columns)
-    if missing:
-        raise ValueError(f"DataFrame is missing required columns: {missing}")
-    for col, expected_type in DATAFRAME_SCHEMA.items():
+    for col, spec in DATAFRAME_SCHEMA.items():
+        if col not in df.columns:
+            if not spec["nullable"]:
+                raise ValueError(f"DataFrame is missing required column: '{col}'")
+            continue
+        expected_type = spec["type"]
         if expected_type in (int, float):
             if not pd.api.types.is_numeric_dtype(df[col]):
                 raise TypeError(f"Column '{col}': expected numeric, got {df[col].dtype}")
         elif expected_type is str:
             if not pd.api.types.is_string_dtype(df[col]):
                 raise TypeError(f"Column '{col}': expected string/object, got {df[col].dtype}")
+
+
+def validate_csv(df: pd.DataFrame) -> None:
+    missing_required = [c for c in REQUIRED_CSV_COLUMNS if c not in df.columns]
+    if missing_required:
+        raise ValueError(f"CSV is missing required columns: {missing_required}")
+    missing_optional = [c for c in OPTIONAL_CSV_COLUMNS if c not in df.columns]
+    if missing_optional:
+        logging.warning("CSV is missing optional columns (synthetic fallback will be used): %s", missing_optional)
 
 
 def _month_range(end: str, n: int) -> list[str]:
@@ -64,12 +81,10 @@ def _draw_zip_params(
     sqft = rng.uniform(p["sqft_min"], p["sqft_max"], size=n)
 
     income_ratio = income / metro_income
+    mu_adjusted  = anchor["lognormal_mu"] + np.log(income_ratio)
     price_latest = np.maximum(
         p["price_floor"],
-        np.round(
-            metro_price * income_ratio * rng.normal(1.0, p["price_noise_std"], size=n),
-            PRICE_ROUND_DP,
-        ),
+        np.round(rng.lognormal(mu_adjusted, p["price_noise_std"], size=n), PRICE_ROUND_DP),
     )
 
     yield_mid = np.clip(
@@ -165,7 +180,7 @@ def _expand_to_panel(
     dom_noise    = rng.normal(0.0, p["monthly_dom_noise_std"], size=(n_months, n))
     dom_matrix   = np.clip(
         np.round(zp["dom_base"][np.newaxis, :] + seasonal_dom[:, np.newaxis] + dom_noise).astype(int),
-        5, 120,
+        *DAYS_ON_MARKET_RANGE,
     )
 
     # ── Homes sold ─────────────────────────────────────────────────────────────
@@ -176,7 +191,7 @@ def _expand_to_panel(
         np.round(
             zp["sold_base"][np.newaxis, :] * (1 + seasonal_sold[:, np.newaxis]) * sold_noise
         ).astype(int),
-        2, 500,
+        *HOMES_SOLD_RANGE,
     )
 
     # ── Index columns ─────────────────────────────────────────────────────────
@@ -217,6 +232,7 @@ def generate_synthetic_data() -> pd.DataFrame:
         anchor     = {
             "median_price":  sum(metro_data["median_price_range"]) / 2,
             "median_income": metro_data["median_income"],
+            "lognormal_mu":  LOGNORMAL_BASE_PRICE[metro],
         }
         zp    = _draw_zip_params(rng, anchor, len(zip_codes), p)
         block = _expand_to_panel(rng, zip_codes, metro, zp, months, p)

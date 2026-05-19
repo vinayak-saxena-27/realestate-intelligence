@@ -117,6 +117,21 @@ FALLBACK_ANCHOR: dict = {
     "weight":                0,
 }
 
+# log-mean (mu) for lognormal price sampling; median of LogNormal(mu, sigma) = exp(mu)
+# values = log(midpoint of each metro's median_price_range)
+LOGNORMAL_BASE_PRICE: dict[str, float] = {
+    "Austin TX":    13.2176,
+    "Phoenix AZ":   12.8480,
+    "Nashville TN": 12.9481,
+    "Charlotte NC": 12.8347,
+    "Tampa FL":     12.7938,
+    "Denver CO":    13.3046,
+    "Raleigh NC":   12.8993,
+    "Atlanta GA":   12.8212,
+    "Dallas TX":    12.8740,
+    "Seattle WA":   13.5929,
+}
+
 # ── Synthetic Data Generation Parameters ─────────────────────────────────────
 SYNTH_PARAMS: dict[str, float] = {
     # heat index (0 = cold market, 1 = hot market)
@@ -171,6 +186,15 @@ SYNTH_PARAMS: dict[str, float] = {
     "seasonal_sold_amplitude":  0.20,   # homes-sold fractional swing; peak in Apr
 }
 
+# ── Validation Range Constants ───────────────────────────────────────────────
+DAYS_ON_MARKET_RANGE:       tuple[int,   int]   = (5,       120)
+HOMES_SOLD_RANGE:           tuple[int,   int]   = (5,       200)
+LIST_TO_SALE_RATIO_RANGE:   tuple[float, float] = (0.93,  1.05)
+INVENTORY_LEVEL_RANGE:      tuple[int,   int]   = (10,     500)
+MEDIAN_INCOME_RANGE:        tuple[int,   int]   = (35_000, 180_000)
+BACHELOR_RATE_RANGE:        tuple[float, float] = (0.10,  0.75)
+FAIR_MARKET_RENT_2BR_RANGE: tuple[int,   int]   = (700,   3_500)
+
 # ── Data Generation ───────────────────────────────────────────────────────────
 RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
@@ -180,19 +204,42 @@ DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
-# validate_schema() in data_loader.py enforces this on both synthetic and real feeds.
-DATAFRAME_SCHEMA: dict[str, type] = {
-    "month":                   str,
-    "zip_code":                str,
-    "metro":                   str,
-    "median_sale_price":       float,
-    "price_per_sqft":          float,
-    "days_on_market":          int,
-    "homes_sold":              int,
-    "median_household_income": float,
-    "fair_market_rent_2br":    float,
-    "yoy_appreciation":        float,
+# nullable=True columns are absent in synthetic output but may appear in CSV feeds.
+# validate_schema() enforces required columns; validate_csv() enforces CSV-specific rules.
+DATAFRAME_SCHEMA: dict[str, dict] = {
+    "month":                   {"type": str,   "nullable": False},
+    "zip_code":                {"type": str,   "nullable": False},
+    "metro":                   {"type": str,   "nullable": False},
+    "median_sale_price":       {"type": float, "nullable": False},
+    "price_per_sqft":          {"type": float, "nullable": False},
+    "days_on_market":          {"type": int,   "nullable": False},
+    "homes_sold":              {"type": int,   "nullable": False},
+    "median_household_income": {"type": float, "nullable": False},
+    "fair_market_rent_2br":    {"type": float, "nullable": False},
+    "yoy_appreciation":        {"type": float, "nullable": False},
+    "bachelor_rate":           {"type": float, "nullable": True},
+    "list_to_sale_ratio":      {"type": float, "nullable": True},
+    "inventory_level":         {"type": int,   "nullable": True},
 }
+
+# ── CSV Column Schema ─────────────────────────────────────────────────────────
+REQUIRED_CSV_COLUMNS: list[str] = [
+    "zip_code",
+    "metro",
+    "median_sale_price",
+    "price_per_sqft",
+    "days_on_market",
+    "homes_sold",
+    "median_household_income",
+    "fair_market_rent_2br",
+]
+
+OPTIONAL_CSV_COLUMNS: list[str] = [
+    "bachelor_rate",
+    "list_to_sale_ratio",
+    "inventory_level",
+    "yoy_appreciation",
+]
 
 # ── Model Parameters ──────────────────────────────────────────────────────────
 # Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py
@@ -262,7 +309,8 @@ HEAT_INDEX_COMPONENTS: dict[str, float] = {
 assert abs(sum(NEIGHBORHOOD_WEIGHTS.values())      - 1.0) < 1e-9, "NEIGHBORHOOD_WEIGHTS must sum to 1.0"
 assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values())  - 1.0) < 1e-9, "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
 assert abs(sum(HEAT_INDEX_COMPONENTS.values())     - 1.0) < 1e-9, "HEAT_INDEX_COMPONENTS must sum to 1.0"
-assert METRO_ZIP_BASE.keys() == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
+assert METRO_ZIP_BASE.keys()        == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
+assert LOGNORMAL_BASE_PRICE.keys()  == METROS.keys(), "LOGNORMAL_BASE_PRICE keys must match METROS keys"
 assert len(CHART_COLORS) == 6, "CHART_COLORS must contain exactly 6 hex strings"
 assert len(SEGMENT_LABELS) == 5, "SEGMENT_LABELS must contain exactly 5 segments"
 _scores = [g["min_score"] for g in GRADE_THRESHOLDS]
