@@ -5,6 +5,7 @@ import streamlit as st
 
 from config import (
     APPR_ROUND_DP,
+    BACHELOR_RATE_RANGE,
     DATA_END_MONTH,
     DATAFRAME_SCHEMA,
     DAYS_ON_MARKET_RANGE,
@@ -263,6 +264,13 @@ def generate_synthetic_data() -> pd.DataFrame:
     lo, hi = LIST_TO_SALE_RATIO_RANGE
     lts_rng = np.random.default_rng(RNG_SEED + 1)
     df["list_to_sale_ratio"] = np.round(lts_rng.uniform(lo, hi, size=len(df)), PRICE_ROUND_DP)
+
+    # bachelor_rate: zip-level education proxy, constant across months for the same zip
+    lo_b, hi_b = BACHELOR_RATE_RANGE
+    bach_rng = np.random.default_rng(RNG_SEED + 2)
+    zip_bach = {z: np.round(bach_rng.uniform(lo_b, hi_b), APPR_ROUND_DP)
+                for z in df["zip_code"].unique()}
+    df["bachelor_rate"] = df["zip_code"].map(zip_bach)
 
     return df
 

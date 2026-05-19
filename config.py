@@ -286,6 +286,8 @@ PAGE_TITLES: dict[str, str] = {
 }
 
 # ── Feature Engineering & Scoring Weights ────────────────────────────────────
+NET_YIELD_EXPENSE_RATIO: float = 0.75  # 25% expense load assumption
+
 NEIGHBORHOOD_WEIGHTS: dict[str, float] = {
     "income":      0.40,
     "education":   0.30,
