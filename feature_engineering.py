@@ -79,11 +79,7 @@ def compute_net_rental_yield(df: pd.DataFrame) -> pd.Series:
 def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
     w    = NEIGHBORHOOD_WEIGHTS
     inc  = _minmax(df["median_household_income"])
-    edu  = (
-        _minmax(df["bachelor_rate"])
-        if "bachelor_rate" in df.columns
-        else pd.Series(50.0, index=df.index)
-    )
+    edu  = _minmax(df["bachelor_rate"])   # guaranteed by data_loader PRD 2
     hval = _minmax(df["median_sale_price"])
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
@@ -98,27 +94,32 @@ _REQUIRED_COLUMNS = [
     "days_on_market",
     "homes_sold",
     "list_to_sale_ratio",
+    "bachelor_rate",         # guaranteed by data_loader; no fallback in compute_neighborhood_score
 ]
 
 
 @st.cache_data
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, dict]:
     """Run full feature engineering pipeline on raw data.
 
-    Returns df with 6 additional feature columns. Input df is never mutated.
+    Returns (df, pop_stats) where df has 6 new feature columns and pop_stats
+    has its 50.0 placeholders replaced with real medians. Input df is never mutated.
     """
     missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
     df = df.copy()
-    df["yoy_appreciation"]  = compute_yoy_appreciation(df)
-    df["price_velocity"]    = compute_price_velocity(df)
-    df["market_heat_index"] = compute_market_heat_index(df)
+    df["yoy_appreciation"]   = compute_yoy_appreciation(df)
+    df["price_velocity"]     = compute_price_velocity(df)
+    df["market_heat_index"]  = compute_market_heat_index(df)
     df["gross_rental_yield"] = compute_gross_rental_yield(df)
     df["net_rental_yield"]   = compute_net_rental_yield(df)
     df["neighborhood_score"] = compute_neighborhood_score(df)
-    return df
+
+    pop_stats["median_market_heat_index"]  = float(df["market_heat_index"].median())
+    pop_stats["median_neighborhood_score"] = float(df["neighborhood_score"].median())
+    return df, pop_stats
 
 
 _POPULATION_STATS_COLUMNS = [
@@ -150,26 +151,31 @@ def get_population_stats(df: pd.DataFrame) -> dict:
 if __name__ == "__main__":
     from data_loader import generate_synthetic_data
 
-    raw = generate_synthetic_data()
+    raw, ps = generate_synthetic_data()
     feature_cols = [
         "yoy_appreciation", "price_velocity", "market_heat_index",
         "gross_rental_yield", "net_rental_yield", "neighborhood_score",
     ]
 
-    # engineer_features must not mutate the input
-    df = engineer_features(raw)
+    # engineer_features must not mutate the input df
+    df, ps = engineer_features(raw, ps)
     assert set(feature_cols).issubset(df.columns), "Missing feature columns"
     assert df.isnull().sum().sum() == 0, "NaN values in engineered df"
     assert all(c in raw.columns for c in raw.columns), "Input df was mutated"
 
+    # pop_stats placeholders must now be real values
+    assert ps["median_market_heat_index"]  != 50.0, "placeholder not filled"
+    assert ps["median_neighborhood_score"] != 50.0, "placeholder not filled"
+
     # determinism check
-    df2 = engineer_features(raw)
+    _, ps2 = generate_synthetic_data()
+    df2, _ = engineer_features(raw, ps2)
     for col in feature_cols:
         assert (df[col] == df2[col]).all(), f"{col} is non-deterministic"
 
     # ValueError on missing column
     try:
-        engineer_features(raw.drop(columns=["median_sale_price"]))
+        engineer_features(raw.drop(columns=["median_sale_price"]), ps)
         raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         print(f"ValueError correctly raised: {e}")
@@ -190,11 +196,6 @@ if __name__ == "__main__":
         s = df[feat].agg(["min", "max", "mean"])
         print(f"{feat:24s}  min={s['min']:8.4f}  max={s['max']:8.4f}  mean={s['mean']:8.4f}")
 
-    print("\nneighborhood_score describe:")
-    print(df["neighborhood_score"].describe().to_string())
-
-    pop = get_population_stats(df)
-    print("\npopulation stats:")
-    for k, v in pop.items():
-        print(f"  {k}: {v:.4f}")
-    assert len(pop) >= 5 and all(isinstance(v, float) for v in pop.values())
+    print("\npop_stats after engineer_features:")
+    for k, v in ps.items():
+        print(f"  {k}: {v}")
