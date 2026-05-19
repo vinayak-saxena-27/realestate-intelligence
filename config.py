@@ -278,6 +278,18 @@ SEGMENT_LABELS: dict[str, str] = {
     "Stable Market":   "Balanced metrics with steady, predictable performance — low risk, low volatility.",
 }
 
+# ── Population Stats Keys ────────────────────────────────────────────────────
+REQUIRED_POP_STAT_KEYS: frozenset[str] = frozenset({
+    "median_yoy_appreciation",
+    "median_gross_rental_yield",
+    "median_market_heat_index",
+    "median_neighborhood_score",
+    "median_days_on_market",
+    "median_investment_score",
+    "top_metro_appreciation",
+    "best_yield_metro",
+})
+
 # ── App Settings ──────────────────────────────────────────────────────────────
 APP_TITLE: str  = "Real Estate Investment Intelligence"
 APP_ICON:  str  = "🏠"

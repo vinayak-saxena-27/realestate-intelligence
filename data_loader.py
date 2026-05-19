@@ -1,4 +1,6 @@
 import logging
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -18,6 +20,7 @@ from config import (
     OPTIONAL_CSV_COLUMNS,
     PRICE_ROUND_DP,
     REQUIRED_CSV_COLUMNS,
+    REQUIRED_POP_STAT_KEYS,
     RNG_SEED,
     SYNTH_PARAMS,
     ZIP_CODES_PER_METRO,
@@ -250,7 +253,34 @@ def _expand_to_panel(
     }
 
 
-def generate_synthetic_data() -> pd.DataFrame:
+def _compute_pop_stats(df: pd.DataFrame) -> dict:
+    """Compute population stats from raw data. Called once inside generate_synthetic_data()."""
+    gross_yield  = df["fair_market_rent_2br"] * 12 / df["median_sale_price"] * 100
+    metro_appr   = df.groupby("metro")["_yoy_appr_rate"].mean() * 100
+    metro_yield  = gross_yield.groupby(df["metro"]).mean()
+
+    pop_stats = {
+        "median_yoy_appreciation":   float((df["_yoy_appr_rate"] * 100).median()),
+        "median_gross_rental_yield": float(gross_yield.median()),
+        "median_market_heat_index":  50.0,   # placeholder — updated after engineer_features()
+        "median_neighborhood_score": 50.0,   # placeholder — updated after engineer_features()
+        "median_days_on_market":     float(df["days_on_market"].median()),
+        "median_investment_score":   0.0,    # placeholder — filled in Week 3
+        "top_metro_appreciation":    str(metro_appr.idxmax()),
+        "best_yield_metro":          str(metro_yield.idxmax()),
+    }
+
+    assert set(pop_stats.keys()) >= REQUIRED_POP_STAT_KEYS, \
+        f"pop_stats is missing keys: {REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())}"
+    assert pop_stats["top_metro_appreciation"] in METROS, \
+        f"top_metro_appreciation '{pop_stats['top_metro_appreciation']}' not in METROS"
+    assert pop_stats["best_yield_metro"] in METROS, \
+        f"best_yield_metro '{pop_stats['best_yield_metro']}' not in METROS"
+
+    return pop_stats
+
+
+def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     """Build the panel dataset: 10 metros × 20 zips × 24 months = 4 800 rows.
 
     No arguments. Uses np.random.default_rng(RNG_SEED) for full reproducibility.
@@ -319,19 +349,23 @@ def generate_synthetic_data() -> pd.DataFrame:
                 for z in df["zip_code"].unique()}
     df["bachelor_rate"] = df["zip_code"].map(zip_bach)
 
-    return df
+    pop_stats = _compute_pop_stats(df)
+    return df, pop_stats
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
-# App modules call load_data() for the Streamlit-cached version.
-# Direct calls to generate_synthetic_data() are safe outside Streamlit (scripts, tests).
+# App modules call get_data() for the Streamlit-cached version.
+# No caller should call generate_synthetic_data() directly.
 
 @st.cache_data
-def load_data() -> pd.DataFrame:
+def get_data() -> Tuple[pd.DataFrame, dict]:
     return generate_synthetic_data()
 
 
 if __name__ == "__main__":
-    df = generate_synthetic_data()
+    df, pop_stats = generate_synthetic_data()
     print("Shape:", df.shape)
     print(df.head(10).to_string())
+    print("\npop_stats:")
+    for k, v in pop_stats.items():
+        print(f"  {k}: {v}")
