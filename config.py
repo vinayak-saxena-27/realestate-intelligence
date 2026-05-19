@@ -249,19 +249,19 @@ OPTIONAL_CSV_COLUMNS: list[str] = [
 
 # ── Model Parameters ──────────────────────────────────────────────────────────
 # Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py
-RF_PARAMS: dict = {
+RF_PARAMS: dict[str, int] = {
     "n_estimators": 100,
     "random_state": 42,
 }
 
-KMEANS_PARAMS: dict = {
+KMEANS_PARAMS: dict[str, int] = {
     "n_clusters":   5,
     "random_state": 42,
 }
 
 # ── Investment Grade Thresholds ───────────────────────────────────────────────
 # Ordered high → low; scoring.py iterates and returns the first match.
-GRADE_THRESHOLDS: list[dict] = [
+GRADE_THRESHOLDS: list[dict[str, str | int]] = [
     {"letter": "A", "min_score": 80, "label": "Strong Buy"},
     {"letter": "B", "min_score": 65, "label": "Buy"},
     {"letter": "C", "min_score": 50, "label": "Hold"},

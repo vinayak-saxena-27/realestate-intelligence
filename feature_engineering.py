@@ -29,6 +29,20 @@ def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
 
 
 def _minmax(series: pd.Series) -> pd.Series:
+    """Min-max scale `series` to [0, 100]. Returns 50.0 for constant input.
+
+    WARNING — global normalization scope:
+    This function scales relative to the min/max of the entire input series,
+    which currently spans all metros, all zip codes, and all months.
+    Consequence: adding a metro with extreme values (e.g. NYC median price)
+    shifts every existing zip's market_heat_index and neighborhood_score
+    silently — no error fires, scores just change.
+
+    Long-term fix: introduce a NORMALIZATION_SCOPE flag in config.py
+    ('global' | 'per_metro') and, when set to 'per_metro', apply this
+    function inside a groupby('metro') before combining. Gate behind the
+    flag so existing behaviour is unchanged until the change is deliberate.
+    """
     lo, hi = series.min(), series.max()
     return pd.Series(
         np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),

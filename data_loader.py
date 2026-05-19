@@ -43,6 +43,39 @@ def validate_csv(df: pd.DataFrame) -> None:
     missing_required = [c for c in REQUIRED_CSV_COLUMNS if c not in df.columns]
     if missing_required:
         raise ValueError(f"CSV is missing required columns: {missing_required}")
+
+    # month column extra checks — required for correct time-series feature computation.
+    # compute_price_velocity and the 12m-lag price both depend on rows being sortable by month.
+    month_col = df["month"]
+    if pd.api.types.is_string_dtype(month_col):
+        # Accept YYYY-MM strings (lexicographically sortable) or any parseable date string.
+        try:
+            pd.to_datetime(month_col)
+        except Exception:
+            raise ValueError(
+                "CSV 'month' column contains values that cannot be parsed as dates. "
+                "Expected format: YYYY-MM (e.g. '2024-01')."
+            )
+    elif not (
+        pd.api.types.is_integer_dtype(month_col)
+        or pd.api.types.is_datetime64_any_dtype(month_col)
+        or hasattr(month_col, "dt")
+    ):
+        raise TypeError(
+            f"CSV 'month' column must be a sortable type (string YYYY-MM, integer, or datetime), "
+            f"got {month_col.dtype}."
+        )
+
+    if "zip_code" in df.columns:
+        dupes = df.duplicated(subset=["zip_code", "month"])
+        if dupes.any():
+            n = dupes.sum()
+            example = df.loc[dupes, ["zip_code", "month"]].iloc[0].to_dict()
+            raise ValueError(
+                f"CSV contains {n} duplicate (zip_code, month) pair(s). "
+                f"First duplicate: {example}. Each zip code must have at most one row per month."
+            )
+
     missing_optional = [c for c in OPTIONAL_CSV_COLUMNS if c not in df.columns]
     if missing_optional:
         logging.warning("CSV is missing optional columns (synthetic fallback will be used): %s", missing_optional)
@@ -264,7 +297,17 @@ def generate_synthetic_data() -> pd.DataFrame:
         PRICE_ROUND_DP,
     )
 
-    # list-to-sale ratio: uniform random within validated range, separate seed for reproducibility
+    # ── Synthetic-column RNG registry ────────────────────────────────────────────
+    # Each derived column that needs its own RNG must claim an offset here first.
+    # Never reuse an offset — silent collision produces correlated sequences.
+    #
+    #   RNG_SEED + 0  (main rng above)  — all price/DOM/sold/yield/appreciation draws
+    #   RNG_SEED + 1  (lts_rng below)   — list_to_sale_ratio (uniform per row)
+    #   RNG_SEED + 2  (bach_rng below)  — bachelor_rate (uniform per zip)
+    #   RNG_SEED + 3  → UNCLAIMED — next derived column goes here
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    # list-to-sale ratio: uniform random within validated range
     lo, hi = LIST_TO_SALE_RATIO_RANGE
     lts_rng = np.random.default_rng(RNG_SEED + 1)
     df["list_to_sale_ratio"] = np.round(lts_rng.uniform(lo, hi, size=len(df)), PRICE_ROUND_DP)
