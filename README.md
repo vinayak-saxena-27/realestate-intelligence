@@ -59,7 +59,7 @@ Metros: Austin TX, Phoenix AZ, Nashville TN, Charlotte NC, Tampa FL, Denver CO, 
 
 Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling uses a lognormal distribution (per-metro log-mean from `LOGNORMAL_BASE_PRICE`), which better models real home price distributions than a symmetric normal.
 
-### Raw DataFrame columns (output of `load_data()`)
+### Raw DataFrame columns (output of `get_data()`)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -68,14 +68,17 @@ Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling u
 | `metro` | str | One of the 10 metros |
 | `median_sale_price` | float | Lognormal-sampled, price-floored |
 | `price_per_sqft` | float | `median_sale_price / sqft` |
-| `days_on_market` | int | Seasonal + heat-correlated, clipped to (5, 120) |
+| `days_on_market` | int | Heat + income composite formula; seasonal overlay; clipped to (5, 120) |
 | `homes_sold` | int | Seasonal + price-scaled, clipped to (5, 200) |
 | `median_household_income` | float | Metro-anchored with zip-level noise |
 | `fair_market_rent_2br` | float | `price × gross_yield / 12`, rent-floored |
 | `median_sale_price_12m_ago` | float | 12-month lag; back-calculated for first 12 months per zip |
-| `list_to_sale_ratio` | float | Uniform in (0.93, 1.05); RNG_SEED + 1 |
-| `bachelor_rate` | float | Uniform in (0.10, 0.75) per zip; RNG_SEED + 2 |
-| `_yoy_appr_rate` | float | Internal synthetic annual appreciation rate (decimal, e.g. 0.08). Not for display — used by the 12m-lag back-calculation only. |
+| `list_to_sale_ratio` | float | Heat-correlated per zip; clipped to (0.93, 1.05) |
+| `bachelor_rate` | float | Income-correlated per zip; clipped to (0.10, 0.75) |
+| `inventory_level` | int | Inverse-heat-correlated per zip; clipped to (10, 500) |
+| `appreciation_rate` | float | Synthetic annual YoY appreciation rate in % (e.g. 8.0). Used by the 12m-lag back-calculation and `pop_stats`. Modified by market pattern injection. |
+| `median_list_price` | float | `median_sale_price × list_to_sale_ratio` with monthly noise |
+| `price_history` | list[float] | 24-element list of monthly `median_sale_price` values for the zip (same value repeated across all month rows for a given zip). Used by `get_price_history_df()`. |
 
 ### Engineered DataFrame columns (output of `engineer_features()`)
 
@@ -93,15 +96,15 @@ Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling u
 ## Feature Engineering
 
 ```python
-from data_loader import load_data
+from data_loader import get_data
 from feature_engineering import engineer_features, get_population_stats
 
-raw_df   = load_data()                  # cached raw panel
-df       = engineer_features(raw_df)    # adds 6 feature columns; @st.cache_data
-pop      = get_population_stats(df)     # population-level medians for narrative context
+raw_df, pop_stats = get_data()                        # cached raw panel + partial pop_stats
+df, pop_stats     = engineer_features(raw_df, pop_stats)  # adds 6 feature columns; fills 2 pop_stats keys
+pop               = get_population_stats(df)          # population-level medians for narrative context
 ```
 
-`engineer_features()` raises `ValueError` with a descriptive message if any required input column is missing. It always operates on a copy of the input — the cached raw DataFrame is never mutated.
+`engineer_features(df, pop_stats)` accepts the `pop_stats` dict from `get_data()`, fills in `median_market_heat_index` and `median_neighborhood_score` with real computed medians (replacing the 50.0 placeholders), and returns `(df, pop_stats)`. It raises `ValueError` with a descriptive message if any required input column is missing. It always operates on a copy of the input — the cached raw DataFrame is never mutated.
 
 `get_population_stats()` raises `ValueError` if called on a raw (non-engineered) DataFrame.
 
@@ -114,7 +117,7 @@ pop      = get_population_stats(df)     # population-level medians for narrative
 | `market_heat_index` | Weighted sum of four min-max normalised components | Components: DOM (inverted, 35%), homes_sold (30%), price_velocity (20%), list_to_sale (15%) |
 | `gross_rental_yield` | `(rent × 12) / price × 100` | Divide-by-zero guarded |
 | `net_rental_yield` | `gross_rental_yield × NET_YIELD_EXPENSE_RATIO` | Ratio (0.75) from config — no literals in function |
-| `neighborhood_score` | Weighted sum of three min-max normalised components | Components: income (40%), bachelor_rate (30%), median_sale_price (30%); bachelor_rate falls back to 50 if column absent |
+| `neighborhood_score` | Weighted sum of three min-max normalised components | Components: income (40%), bachelor_rate (30%), median_sale_price (30%); `bachelor_rate` is guaranteed present by `data_loader` — no fallback |
 
 > **Normalization note:** `_minmax()` scales globally across all rows in the input DataFrame. Adding a metro with extreme values will silently shift every existing zip's `market_heat_index` and `neighborhood_score`. Per-metro normalization is the planned fix, gated behind a `NORMALIZATION_SCOPE` flag in `config.py`.
 
@@ -137,7 +140,7 @@ All constants live in `config.py`. Nothing is hardcoded in application logic.
 |---|---|
 | `DATAFRAME_SCHEMA` | Column types + nullable flag for the raw output schema |
 | `REQUIRED_CSV_COLUMNS` | 9 columns that must be present or `validate_csv()` raises — includes `month` (required for time-series features) |
-| `OPTIONAL_CSV_COLUMNS` | 4 columns used if present; warning logged if absent |
+| `OPTIONAL_CSV_COLUMNS` | 6 columns used if present; defaults applied if absent (`bachelor_rate`→0.35, `list_to_sale_ratio`→0.98, `inventory_level`→100, `appreciation_rate`→5.0, `median_list_price` back-calculated, `yoy_appreciation` from 12m lag) |
 | `DAYS_ON_MARKET_RANGE` | `(5, 120)` — clip bounds and validation range |
 | `HOMES_SOLD_RANGE` | `(5, 200)` |
 | `LIST_TO_SALE_RATIO_RANGE` | `(0.93, 1.05)` |
@@ -156,6 +159,26 @@ All constants live in `config.py`. Nothing is hardcoded in application logic.
 | `NEIGHBORHOOD_WEIGHTS` | income 40%, education 30%, home_value 30% | 1.0 |
 | `HEAT_INDEX_COMPONENTS` | days_on_market 35%, homes_sold 30%, price_velocity 20%, list_to_sale 15% | 1.0 |
 | `NET_YIELD_EXPENSE_RATIO` | `0.75` — 25% expense load applied to gross yield | — |
+
+### Market pattern injection
+
+Applied after base synthetic generation to create realistic market variation for demo purposes. All thresholds are constants — `_inject_market_patterns()` contains no literals.
+
+| Constant | Value | Effect |
+|---|---|---|
+| `TOP_APPRECIATING_COUNT` | 15 | Top-15 zips by appreciation boosted to 1.4× their base rate |
+| `DECLINING_COUNT` | 12 | 12 zips in `DECLINING_METROS` forced to −2% … −5% appreciation |
+| `DECLINING_METROS` | `["Dallas TX", "Phoenix AZ"]` | Source metros for declining zip selection |
+| `HOT_MARKET_COUNT` | 20 | Top-20 zips by heat forced DOM < `HOT_DOM_CEILING` |
+| `HOT_DOM_CEILING` | 12 | Maximum DOM for hot-market zips |
+| `SLOW_MARKET_COUNT` | 15 | Bottom-15 zips by heat forced DOM > `SLOW_DOM_FLOOR` |
+| `SLOW_DOM_FLOOR` | 55 | Minimum DOM for slow-market zips; all other zips capped at this value so injection is the sole source of DOM > 55 |
+
+### Population stats
+
+| Constant | Purpose |
+|---|---|
+| `REQUIRED_POP_STAT_KEYS` | `frozenset` of 8 keys that `pop_stats` must contain before downstream modules consume it. Keys: `median_yoy_appreciation`, `median_gross_rental_yield`, `median_market_heat_index`, `median_neighborhood_score`, `median_days_on_market`, `median_investment_score`, `top_metro_appreciation`, `best_yield_metro`. `median_investment_score` stays 0.0 until the Week 3 scoring module fills it. |
 
 ### Model parameters
 
@@ -179,8 +202,8 @@ All constants live in `config.py`. Nothing is hardcoded in application logic.
 
 | Function | Strategy |
 |---|---|
-| `load_data()` | `@st.cache_data` — raw panel computed once per session |
-| `engineer_features(df)` | `@st.cache_data` — engineered DataFrame computed once from cached raw |
+| `get_data()` | `@st.cache_data` — raw panel + partial `pop_stats` computed once per session |
+| `engineer_features(df, pop_stats)` | `@st.cache_data` — engineered DataFrame + completed `pop_stats` computed once from cached raw |
 | `get_population_stats(df)` | No cache — fast dict from already-cached engineered DataFrame |
 | Individual `compute_*()` functions | No cache — called only inside `engineer_features()` |
 
