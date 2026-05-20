@@ -110,13 +110,6 @@ METRO_ZIP_BASE: dict[str, int] = {
 
 ZIP_CODES_PER_METRO: int = 20
 
-FALLBACK_ANCHOR: dict = {
-    "median_price_range":   (350_000, 450_000),
-    "price_per_sqft_range": (170, 230),
-    "median_income":         70_000,
-    "weight":                0,
-}
-
 # log-mean (mu) for lognormal price sampling; median of LogNormal(mu, sigma) = exp(mu)
 # values = log(midpoint of each metro's median_price_range)
 LOGNORMAL_BASE_PRICE: dict[str, float] = {
