@@ -78,7 +78,6 @@ Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling u
 | `inventory_level` | int | Inverse-heat-correlated per zip; clipped to (10, 500) |
 | `appreciation_rate` | float | Synthetic annual YoY appreciation rate in % (e.g. 8.0). Used by the 12m-lag back-calculation and `pop_stats`. Modified by market pattern injection. |
 | `median_list_price` | float | `median_sale_price × list_to_sale_ratio` with monthly noise |
-| `price_history` | list[float] | 24-element list of monthly `median_sale_price` values for the zip (same value repeated across all month rows for a given zip). Used by `get_price_history_df()`. |
 
 ### Engineered DataFrame columns (output of `engineer_features()`)
 

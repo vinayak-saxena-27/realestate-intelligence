@@ -279,11 +279,6 @@ def _expand_to_panel(
         PRICE_ROUND_DP,
     )
 
-    # ── price_history ─────────────────────────────────────────────────────────
-    # One list of 24 floats per zip (oldest → newest); same value repeated for
-    # every month row belonging to that zip — get_price_history_df() unpacks it.
-    price_histories = [price_matrix[:, i].tolist() for i in range(n)]
-
     # ── Index columns ─────────────────────────────────────────────────────────
     # np.repeat gives [month0]*n, [month1]*n, ... — aligns with row-major matrix flatten
     months_col = np.repeat(months, n)
@@ -307,7 +302,6 @@ def _expand_to_panel(
         "bachelor_rate":           np.tile(zp["bachelor_rate"],      (n_months, 1)).flatten().tolist(),
         "inventory_level":         np.tile(zp["inventory_level"],    (n_months, 1)).flatten().tolist(),
         "median_list_price":       median_list_price_matrix.flatten().tolist(),
-        "price_history":           price_histories * n_months,
     }
 
 
@@ -532,10 +526,6 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
         df["median_sale_price_12m_ago"] = np.round(
             df["median_sale_price"] / (1 + df["appreciation_rate"] / 100), PRICE_ROUND_DP
         )
-
-    # price_history: flat 24-repeat when not provided — chart renders, no crash
-    if "price_history" not in df.columns:
-        df["price_history"] = df["median_sale_price"].apply(lambda p: [p] * 24)
 
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats

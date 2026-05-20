@@ -208,7 +208,8 @@ DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
 # Contract between the data layer and the rest of the app.
 # nullable=True columns may be absent in CSV feeds; all are present in synthetic output.
 # validate_schema() enforces required columns; validate_csv() enforces CSV-specific rules.
-# price_history (list of 24 floats per zip) is intentionally excluded — complex type.
+# price_history is not stored in the panel — get_price_history_df() builds it on demand
+# from the (zip_code, month, median_sale_price) rows that are already present.
 DATAFRAME_SCHEMA: dict[str, dict] = {
     "month":                   {"type": str,   "nullable": False},
     "zip_code":                {"type": str,   "nullable": False},
