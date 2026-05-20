@@ -424,6 +424,10 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     validate_schema(df)
     df = df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
 
+    # Inject before the 12m-lag backfill so appreciation_rate is final when
+    # back-calculating prior prices for months 1–12 of each zip.
+    df = _inject_market_patterns(df, rng)
+
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
     # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
     # appreciation_rate is never overwritten by engineer_features() — no order-of-ops risk.
@@ -433,9 +437,6 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
         df.loc[early, "median_sale_price"] / (1 + df.loc[early, "appreciation_rate"] / 100),
         PRICE_ROUND_DP,
     )
-
-    # Inject deliberate market patterns — final step before pop_stats
-    df = _inject_market_patterns(df, rng)
 
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats
@@ -464,6 +465,22 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
         raise ValueError(
             f"Non-numeric values found after coercion: {bad[bad > 0].to_dict()}"
         )
+
+    # Optional columns present in the CSV must also be numeric — a present-but-bad
+    # optional column is just as dangerous as a bad required column downstream.
+    optional_numeric = [
+        "bachelor_rate", "list_to_sale_ratio", "inventory_level",
+        "appreciation_rate", "median_list_price", "yoy_appreciation",
+    ]
+    for col in optional_numeric:
+        if col not in df.columns:
+            continue
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        bad_count = df[col].isnull().sum()
+        if bad_count:
+            raise ValueError(
+                f"Non-numeric values found in optional column '{col}': {bad_count} bad value(s)"
+            )
 
     # Zip code: string, zero-padded to 5 digits
     df["zip_code"] = df["zip_code"].astype(str).str.zfill(5)
@@ -517,18 +534,19 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
 
 def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
     """
-    Convert the price_history list for a single zip into a long-format DataFrame.
-    Returns a DataFrame with columns: month (int 1–24), median_sale_price (float), zip_code (str).
+    Return a long-format price history DataFrame for a single zip.
+    Columns: month (YYYY-MM str), median_sale_price (float), zip_code (str).
+    Rows are sorted oldest → newest by month.
     Used by create_price_history() in charts.py.
     Raises ValueError if zip_code is not found in df.
     """
     mask = df["zip_code"] == zip_code
     if not mask.any():
         raise ValueError(f"zip_code '{zip_code}' not found in DataFrame.")
-    history = df.loc[mask, "price_history"].iloc[0]
+    zip_rows = df.loc[mask].sort_values("month")
     return pd.DataFrame({
-        "month":             list(range(1, len(history) + 1)),
-        "median_sale_price": history,
+        "month":             zip_rows["month"].tolist(),
+        "median_sale_price": zip_rows["median_sale_price"].tolist(),
         "zip_code":          zip_code,
     })
 

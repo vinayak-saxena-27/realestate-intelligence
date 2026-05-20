@@ -110,6 +110,7 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
         raise ValueError(f"Missing required columns: {missing}")
 
     df = df.copy()
+    df = df.sort_values(["zip_code", "month"]).reset_index(drop=True)
     df["yoy_appreciation"]   = compute_yoy_appreciation(df)
     df["price_velocity"]     = compute_price_velocity(df)
     df["market_heat_index"]  = compute_market_heat_index(df)
