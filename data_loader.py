@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Tuple
 
 import numpy as np
@@ -20,6 +21,7 @@ from config import (
     LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
     METROS,
+    MAX_CSV_SIZE_MB,
     METRO_ZIP_BASE,
     N_MONTHS,
     OPTIONAL_CSV_COLUMNS,
@@ -309,12 +311,13 @@ def _expand_to_panel(
     }
 
 
-def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
     """Apply deliberate market patterns after base generation. Modifies df in place.
 
     Operates at zip level so appreciation_rate stays uniform per zip and DOM
     changes apply to all months of the selected zips.
-    Called after all base assertions pass — final step before _compute_pop_stats().
+    Called after sorting and before the 12m-lag backfill so appreciation_rate
+    is final when prior prices are back-calculated.
     """
     # Reset any naturally negative rates so injection is the sole source of negatives
     neg_mask = df["appreciation_rate"] < 0
@@ -358,7 +361,6 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> pd.Da
         SLOW_DOM_FLOOR + 1, 121, size=slow_mask.sum()
     )
 
-    return df
 
 
 def _compute_pop_stats(df: pd.DataFrame) -> dict:
@@ -426,7 +428,7 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
 
     # Inject before the 12m-lag backfill so appreciation_rate is final when
     # back-calculating prior prices for months 1–12 of each zip.
-    df = _inject_market_patterns(df, rng)
+    _inject_market_patterns(df, rng)
 
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
     # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
@@ -448,6 +450,13 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
     Returns the same (df, pop_stats) tuple as generate_synthetic_data().
     Raises ValueError with a clear message if required columns are missing.
     """
+    size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    if size_mb > MAX_CSV_SIZE_MB:
+        raise ValueError(
+            f"CSV file is {size_mb:.1f} MB, which exceeds the {MAX_CSV_SIZE_MB} MB limit. "
+            "Split the file or increase MAX_CSV_SIZE_MB in config.py."
+        )
+
     df = pd.read_csv(file_path)
 
     # Reuse existing validator: required columns, month format, zip/month duplicates

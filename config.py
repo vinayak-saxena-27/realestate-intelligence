@@ -92,8 +92,8 @@ METROS: dict[str, dict] = {
     },
 }
 
-assert abs(sum(m["weight"] for m in METROS.values()) - 1.0) < 1e-9, \
-    "Metro weights must sum to 1.0"
+if abs(sum(m["weight"] for m in METROS.values()) - 1.0) >= 1e-9:
+    raise ValueError("Metro weights must sum to 1.0")
 
 METRO_ZIP_BASE: dict[str, int] = {
     "Austin TX":    78700,
@@ -307,6 +307,9 @@ REQUIRED_POP_STAT_KEYS: frozenset[str] = frozenset({
     "best_yield_metro",
 })
 
+# ── CSV Ingestion Limits ──────────────────────────────────────────────────────
+MAX_CSV_SIZE_MB: int = 50   # reject files larger than this before reading into memory
+
 # ── App Settings ──────────────────────────────────────────────────────────────
 APP_TITLE: str  = "Real Estate Investment Intelligence"
 APP_ICON:  str  = "🏠"
@@ -343,13 +346,22 @@ HEAT_INDEX_COMPONENTS: dict[str, float] = {
     "list_to_sale":   0.15,
 }
 
-assert abs(sum(NEIGHBORHOOD_WEIGHTS.values())      - 1.0) < 1e-9, "NEIGHBORHOOD_WEIGHTS must sum to 1.0"
-assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values())  - 1.0) < 1e-9, "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
-assert abs(sum(HEAT_INDEX_COMPONENTS.values())     - 1.0) < 1e-9, "HEAT_INDEX_COMPONENTS must sum to 1.0"
-assert METRO_ZIP_BASE.keys()        == METROS.keys(), "METRO_ZIP_BASE keys must match METROS keys"
-assert LOGNORMAL_BASE_PRICE.keys()  == METROS.keys(), "LOGNORMAL_BASE_PRICE keys must match METROS keys"
-assert len(CHART_COLORS) == 6, "CHART_COLORS must contain exactly 6 hex strings"
-assert len(SEGMENT_LABELS) == KMEANS_PARAMS["n_clusters"], \
-    f"SEGMENT_LABELS must have one entry per cluster (n_clusters={KMEANS_PARAMS['n_clusters']})"
+if abs(sum(NEIGHBORHOOD_WEIGHTS.values())     - 1.0) >= 1e-9:
+    raise ValueError("NEIGHBORHOOD_WEIGHTS must sum to 1.0")
+if abs(sum(INVESTMENT_SCORE_WEIGHTS.values()) - 1.0) >= 1e-9:
+    raise ValueError("INVESTMENT_SCORE_WEIGHTS must sum to 1.0")
+if abs(sum(HEAT_INDEX_COMPONENTS.values())    - 1.0) >= 1e-9:
+    raise ValueError("HEAT_INDEX_COMPONENTS must sum to 1.0")
+if METRO_ZIP_BASE.keys() != METROS.keys():
+    raise ValueError("METRO_ZIP_BASE keys must match METROS keys")
+if LOGNORMAL_BASE_PRICE.keys() != METROS.keys():
+    raise ValueError("LOGNORMAL_BASE_PRICE keys must match METROS keys")
+if len(CHART_COLORS) != 6:
+    raise ValueError("CHART_COLORS must contain exactly 6 hex strings")
+if len(SEGMENT_LABELS) != KMEANS_PARAMS["n_clusters"]:
+    raise ValueError(
+        f"SEGMENT_LABELS must have one entry per cluster (n_clusters={KMEANS_PARAMS['n_clusters']})"
+    )
 _scores = [g["min_score"] for g in GRADE_THRESHOLDS]
-assert _scores == sorted(_scores, reverse=True), "GRADE_THRESHOLDS must be ordered high → low"
+if _scores != sorted(_scores, reverse=True):
+    raise ValueError("GRADE_THRESHOLDS must be ordered high → low")
