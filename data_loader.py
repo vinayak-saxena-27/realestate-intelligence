@@ -72,7 +72,6 @@ def validate_csv(df: pd.DataFrame) -> None:
     elif not (
         pd.api.types.is_integer_dtype(month_col)
         or pd.api.types.is_datetime64_any_dtype(month_col)
-        or hasattr(month_col, "dt")
     ):
         raise TypeError(
             f"CSV 'month' column must be a sortable type (string YYYY-MM, integer, or datetime), "
@@ -339,7 +338,7 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
 
     # HOT_MARKET_COUNT zips — all DOM rows forced below HOT_DOM_CEILING
     hot_mask = df["zip_code"].isin(hot_zips)
-    df.loc[hot_mask, "days_on_market"] = rng.integers(3, HOT_DOM_CEILING, size=hot_mask.sum())
+    df.loc[hot_mask, "days_on_market"] = rng.integers(DAYS_ON_MARKET_RANGE[0], HOT_DOM_CEILING, size=hot_mask.sum())
 
     # Cap other (non-hot, non-slow) zips at SLOW_DOM_FLOOR so injection is the sole
     # source of DOM > SLOW_DOM_FLOOR — the new _compute_dom() formula can naturally
@@ -351,7 +350,7 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
     # SLOW_MARKET_COUNT zips — all DOM rows forced above SLOW_DOM_FLOOR
     slow_mask = df["zip_code"].isin(slow_zips)
     df.loc[slow_mask, "days_on_market"] = rng.integers(
-        SLOW_DOM_FLOOR + 1, 121, size=slow_mask.sum()
+        SLOW_DOM_FLOOR + 1, DAYS_ON_MARKET_RANGE[1] + 1, size=slow_mask.sum()
     )
 
 

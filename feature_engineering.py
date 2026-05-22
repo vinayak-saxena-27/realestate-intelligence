@@ -163,7 +163,7 @@ if __name__ == "__main__":
     df, ps = engineer_features(raw, ps)
     assert set(feature_cols).issubset(df.columns), "Missing feature columns"
     assert df.isnull().sum().sum() == 0, "NaN values in engineered df"
-    assert all(c in raw.columns for c in raw.columns), "Input df was mutated"
+    assert "yoy_appreciation" not in raw.columns, "Input df was mutated"
 
     # pop_stats placeholders must now be real values
     assert ps["median_market_heat_index"]  != 50.0, "placeholder not filled"

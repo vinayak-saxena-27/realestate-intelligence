@@ -186,9 +186,7 @@ DAYS_ON_MARKET_RANGE:       tuple[int,   int]   = (5,       120)
 HOMES_SOLD_RANGE:           tuple[int,   int]   = (5,       200)
 LIST_TO_SALE_RATIO_RANGE:   tuple[float, float] = (0.93,  1.05)
 INVENTORY_LEVEL_RANGE:      tuple[int,   int]   = (10,     500)
-MEDIAN_INCOME_RANGE:        tuple[int,   int]   = (35_000, 180_000)
 BACHELOR_RATE_RANGE:        tuple[float, float] = (0.10,  0.75)
-FAIR_MARKET_RENT_2BR_RANGE: tuple[int,   int]   = (700,   3_500)
 
 # ── Data Generation ───────────────────────────────────────────────────────────
 RNG_SEED: int       = 42
