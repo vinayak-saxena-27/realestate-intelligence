@@ -96,8 +96,7 @@ def validate_csv(df: pd.DataFrame) -> None:
 
 def _month_range(end: str, n: int) -> list[str]:
     """Return n consecutive YYYY-MM strings ending at `end` (inclusive)."""
-    end_period = pd.Period(end, freq="M")
-    return [(end_period - (n - 1 - i)).strftime("%Y-%m") for i in range(n)]
+    return [p.strftime("%Y-%m") for p in pd.period_range(end=end, periods=n, freq="M")]
 
 
 def _compute_dom(
@@ -374,12 +373,13 @@ def _compute_pop_stats(df: pd.DataFrame) -> dict:
         "best_yield_metro":          str(metro_yield.idxmax()),
     }
 
-    assert set(pop_stats.keys()) >= REQUIRED_POP_STAT_KEYS, \
-        f"pop_stats is missing keys: {REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())}"
-    assert pop_stats["top_metro_appreciation"] in METROS, \
-        f"top_metro_appreciation '{pop_stats['top_metro_appreciation']}' not in METROS"
-    assert pop_stats["best_yield_metro"] in METROS, \
-        f"best_yield_metro '{pop_stats['best_yield_metro']}' not in METROS"
+    missing_keys = REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())
+    if missing_keys:
+        raise ValueError(f"pop_stats is missing keys: {missing_keys}")
+    if pop_stats["top_metro_appreciation"] not in METROS:
+        raise ValueError(f"top_metro_appreciation '{pop_stats['top_metro_appreciation']}' not in METROS")
+    if pop_stats["best_yield_metro"] not in METROS:
+        raise ValueError(f"best_yield_metro '{pop_stats['best_yield_metro']}' not in METROS")
 
     return pop_stats
 
@@ -411,11 +411,16 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     df = pd.concat(blocks, ignore_index=True)
 
     expected_rows = len(METROS) * ZIP_CODES_PER_METRO * N_MONTHS
-    assert df.shape[0] == expected_rows,             f"Expected {expected_rows} rows, got {df.shape[0]}"
-    assert df.isnull().sum().sum() == 0,             "DataFrame contains NaN values"
-    assert (df["median_sale_price"] >= p["price_floor"]).all()
-    assert (df["fair_market_rent_2br"] >= p["rent_floor"]).all()
-    assert (df["median_household_income"] >= p["income_floor"]).all()
+    if df.shape[0] != expected_rows:
+        raise ValueError(f"Expected {expected_rows} rows, got {df.shape[0]}")
+    if df.isnull().sum().sum() != 0:
+        raise ValueError("DataFrame contains NaN values after generation")
+    if not (df["median_sale_price"] >= p["price_floor"]).all():
+        raise ValueError(f"median_sale_price contains values below price_floor ({p['price_floor']})")
+    if not (df["fair_market_rent_2br"] >= p["rent_floor"]).all():
+        raise ValueError(f"fair_market_rent_2br contains values below rent_floor ({p['rent_floor']})")
+    if not (df["median_household_income"] >= p["income_floor"]).all():
+        raise ValueError(f"median_household_income contains values below income_floor ({p['income_floor']})")
 
     validate_schema(df)
     df = df.sort_values(["metro", "zip_code", "month"]).reset_index(drop=True)
@@ -555,10 +560,21 @@ def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
 # No caller should call generate_synthetic_data() or load_csv_data() directly.
 
 @st.cache_data
-def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
+def _get_data_cached(
+    file_path: str | None,
+    file_mtime: float,  # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_size: int,     # noqa: ARG001 — cache-key discriminator only; not used in body
+) -> Tuple[pd.DataFrame, dict]:
     if file_path is not None:
         return load_csv_data(file_path)
     return generate_synthetic_data()
+
+
+def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
+    if file_path is not None:
+        s = os.stat(file_path)
+        return _get_data_cached(file_path, s.st_mtime, s.st_size)
+    return _get_data_cached(None, 0.0, 0)
 
 
 if __name__ == "__main__":
