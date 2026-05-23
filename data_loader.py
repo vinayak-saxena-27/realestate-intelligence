@@ -303,14 +303,15 @@ def _expand_to_panel(
     }
 
 
-def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
-    """Apply deliberate market patterns after base generation. Modifies df in place.
+def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Apply deliberate market patterns after base generation. Returns a new DataFrame.
 
     Operates at zip level so appreciation_rate stays uniform per zip and DOM
     changes apply to all months of the selected zips.
     Called after sorting and before the 12m-lag backfill so appreciation_rate
     is final when prior prices are back-calculated.
     """
+    df = df.copy()
     # Reset any naturally negative rates so injection is the sole source of negatives
     neg_mask = df["appreciation_rate"] < 0
     df.loc[neg_mask, "appreciation_rate"] = df.loc[neg_mask, "appreciation_rate"].abs()
@@ -352,6 +353,7 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
     df.loc[slow_mask, "days_on_market"] = rng.integers(
         SLOW_DOM_FLOOR + 1, DAYS_ON_MARKET_RANGE[1] + 1, size=slow_mask.sum()
     )
+    return df
 
 
 
@@ -427,7 +429,7 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
 
     # Inject before the 12m-lag backfill so appreciation_rate is final when
     # back-calculating prior prices for months 1–12 of each zip.
-    _inject_market_patterns(df, rng)
+    df = _inject_market_patterns(df, rng)
 
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
     # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
