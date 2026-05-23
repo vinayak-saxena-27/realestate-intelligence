@@ -20,7 +20,9 @@ def compute_yoy_appreciation(df: pd.DataFrame) -> pd.Series:
 
 
 def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
-    w = SYNTH_PARAMS["velocity_window"]
+    if not df.groupby("zip_code")["month"].apply(lambda x: x.is_monotonic_increasing).all():
+        raise ValueError("compute_price_velocity requires df sorted by (zip_code, month)")
+    w = int(SYNTH_PARAMS["velocity_window"])
     return (
         df.groupby("zip_code")["median_sale_price"]
         .transform(lambda x: x.pct_change().mul(100).rolling(w).mean())
