@@ -370,6 +370,7 @@ def _compute_pop_stats(df: pd.DataFrame) -> dict:
         "median_investment_score":   0.0,    # placeholder — filled in Week 3
         "top_metro_appreciation":    str(metro_appr.idxmax()),
         "best_yield_metro":          str(metro_yield.idxmax()),
+        "is_finalized":              False,
     }
 
     missing_keys = REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())
@@ -583,3 +584,6 @@ if __name__ == "__main__":
     print("\npop_stats:")
     for k, v in pop_stats.items():
         print(f"  {k}: {v}")
+
+    assert not pop_stats["is_finalized"], "generate_synthetic_data() must return unfinalized pop_stats"
+    print("\nAssertion passed: pop_stats is unfinalized after generate_synthetic_data()")

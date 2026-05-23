@@ -297,6 +297,7 @@ REQUIRED_POP_STAT_KEYS: frozenset[str] = frozenset({
     "median_investment_score",
     "top_metro_appreciation",
     "best_yield_metro",
+    "is_finalized",
 })
 
 # ── CSV Ingestion Limits ──────────────────────────────────────────────────────
