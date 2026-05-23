@@ -313,6 +313,11 @@ PAGE_TITLES: dict[str, str] = {
     "data":         "Data Explorer",
 }
 
+# ── Normalization Scope ───────────────────────────────────────────────────────
+# 'global'    — min/max spans all metros (original behaviour, default)
+# 'per_metro' — min/max computed within each metro before combining
+NORMALIZATION_SCOPE: str = "global"
+
 # ── Feature Engineering & Scoring Weights ────────────────────────────────────
 NET_YIELD_EXPENSE_RATIO: float = 0.75  # 25% expense load assumption
 
@@ -344,6 +349,10 @@ if abs(sum(INVESTMENT_SCORE_WEIGHTS.values()) - 1.0) >= 1e-9:
     raise ValueError("INVESTMENT_SCORE_WEIGHTS must sum to 1.0")
 if abs(sum(HEAT_INDEX_COMPONENTS.values())    - 1.0) >= 1e-9:
     raise ValueError("HEAT_INDEX_COMPONENTS must sum to 1.0")
+if NORMALIZATION_SCOPE not in {"global", "per_metro"}:
+    raise ValueError(
+        f"NORMALIZATION_SCOPE must be 'global' or 'per_metro', got {NORMALIZATION_SCOPE!r}"
+    )
 if METRO_ZIP_BASE.keys() != METROS.keys():
     raise ValueError("METRO_ZIP_BASE keys must match METROS keys")
 if LOGNORMAL_BASE_PRICE.keys() != METROS.keys():

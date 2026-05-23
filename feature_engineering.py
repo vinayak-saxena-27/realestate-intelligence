@@ -6,6 +6,7 @@ from config import (
     HEAT_INDEX_COMPONENTS,
     NEIGHBORHOOD_WEIGHTS,
     NET_YIELD_EXPENSE_RATIO,
+    NORMALIZATION_SCOPE,
     SYNTH_PARAMS,
 )
 
@@ -30,22 +31,19 @@ def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
     )
 
 
-def _minmax(series: pd.Series) -> pd.Series:
+def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
     """Min-max scale `series` to [0, 100]. Returns 50.0 for constant input.
 
-    WARNING — global normalization scope:
-    This function scales relative to the min/max of the entire input series,
-    which currently spans all metros, all zip codes, and all months.
-    Consequence: adding a metro with extreme values (e.g. NYC median price)
-    shifts every existing zip's market_heat_index and neighborhood_score
-    silently — no error fires, scores just change.
-
-    Long-term fix: introduce a NORMALIZATION_SCOPE flag in config.py
-    ('global' | 'per_metro') and, when set to 'per_metro', apply this
-    function inside a groupby('metro') before combining. Gate behind the
-    flag so existing behaviour is unchanged until the change is deliberate.
+    When `groups` is provided, scaling is applied independently within each group.
     """
-    lo, hi = series.min(), series.max()
+    if groups is None:
+        lo, hi = series.min(), series.max()
+        return pd.Series(
+            np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),
+            index=series.index,
+        )
+    lo = series.groupby(groups).transform("min")
+    hi = series.groupby(groups).transform("max")
     return pd.Series(
         np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),
         index=series.index,
@@ -53,11 +51,12 @@ def _minmax(series: pd.Series) -> pd.Series:
 
 
 def compute_market_heat_index(df: pd.DataFrame) -> pd.Series:
-    w        = HEAT_INDEX_COMPONENTS
-    dom_inv  = 100 - _minmax(df["days_on_market"])
-    sold     = _minmax(df["homes_sold"])
-    velocity = _minmax(df["price_velocity"])
-    lts      = _minmax(df["list_to_sale_ratio"])
+    w      = HEAT_INDEX_COMPONENTS
+    groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
+    dom_inv  = 100 - _minmax(df["days_on_market"],    groups)
+    sold     = _minmax(df["homes_sold"],               groups)
+    velocity = _minmax(df["price_velocity"],           groups)
+    lts      = _minmax(df["list_to_sale_ratio"],       groups)
     return (
         dom_inv  * w["days_on_market"]
         + sold     * w["homes_sold"]
@@ -79,10 +78,11 @@ def compute_net_rental_yield(df: pd.DataFrame) -> pd.Series:
 
 
 def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
-    w    = NEIGHBORHOOD_WEIGHTS
-    inc  = _minmax(df["median_household_income"])
-    edu  = _minmax(df["bachelor_rate"])   # guaranteed by data_loader PRD 2
-    hval = _minmax(df["median_sale_price"])
+    w      = NEIGHBORHOOD_WEIGHTS
+    groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
+    inc  = _minmax(df["median_household_income"], groups)
+    edu  = _minmax(df["bachelor_rate"],           groups)  # guaranteed by data_loader PRD 2
+    hval = _minmax(df["median_sale_price"],       groups)
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
 
@@ -203,3 +203,27 @@ if __name__ == "__main__":
     print("\npop_stats after engineer_features:")
     for k, v in ps.items():
         print(f"  {k}: {v}")
+
+    # ── per_metro scope ──────────────────────────────────────────────────────
+    # Rebind the module global so compute_* functions pick up the new scope.
+    NORMALIZATION_SCOPE = "per_metro"
+
+    heat_pm = compute_market_heat_index(df)
+    nbr_pm  = compute_neighborhood_score(df)
+
+    assert heat_pm.between(0, 100).all(),   "per_metro heat_index outside [0, 100]"
+    assert nbr_pm.between(0, 100).all(),    "per_metro neighborhood_score outside [0, 100]"
+    assert heat_pm.isna().sum() == 0,       "NaN in per_metro heat_index"
+    assert nbr_pm.isna().sum() == 0,        "NaN in per_metro neighborhood_score"
+    # Synthetic metros have different price/DOM ranges, so per_metro scores differ
+    # from global scores on the same data.
+    assert not (heat_pm == df["market_heat_index"]).all(), \
+        "per_metro and global heat_index are identical — scope has no effect"
+    assert not (nbr_pm  == df["neighborhood_score"]).all(), \
+        "per_metro and global neighborhood_score are identical — scope has no effect"
+
+    print("\n--- per_metro scope ---")
+    for feat, s in [("heat_index (pm)", heat_pm), ("neighborhood_score (pm)", nbr_pm)]:
+        print(f"{feat:28s}  min={s.min():8.4f}  max={s.max():8.4f}  mean={s.mean():8.4f}")
+
+    NORMALIZATION_SCOPE = "global"  # restore for any code that runs after this block
