@@ -11,6 +11,18 @@ from config import (
 )
 
 
+def assert_pop_stats_finalized(pop_stats: dict) -> None:
+    """Raise RuntimeError if pop_stats has not been finalized by engineer_features().
+
+    Call at the top of any function that reads pop_stats for scoring or display.
+    """
+    if not pop_stats.get("is_finalized", False):
+        raise RuntimeError(
+            "pop_stats is not finalized. "
+            "Call engineer_features(df, pop_stats) before using pop_stats for scoring or display."
+        )
+
+
 def compute_yoy_appreciation(df: pd.DataFrame) -> pd.Series:
     p_now = df["median_sale_price"]
     p_12m = df["median_sale_price_12m_ago"]
@@ -123,6 +135,7 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
 
     pop_stats["median_market_heat_index"]  = float(df["market_heat_index"].median())
     pop_stats["median_neighborhood_score"] = float(df["neighborhood_score"].median())
+    pop_stats["is_finalized"]              = True
     return df, pop_stats
 
 
@@ -156,6 +169,7 @@ if __name__ == "__main__":
     from data_loader import generate_synthetic_data
 
     raw, ps = generate_synthetic_data()
+    raw_ps   = ps.copy()   # snapshot before finalization
     feature_cols = [
         "yoy_appreciation", "price_velocity", "market_heat_index",
         "gross_rental_yield", "net_rental_yield", "neighborhood_score",
@@ -167,9 +181,19 @@ if __name__ == "__main__":
     assert df.isnull().sum().sum() == 0, "NaN values in engineered df"
     assert "yoy_appreciation" not in raw.columns, "Input df was mutated"
 
-    # pop_stats placeholders must now be real values
+    # pop_stats must be unfinalized before engineer_features() and finalized after
+    assert not raw_ps["is_finalized"], "raw pop_stats should be unfinalized"
+    assert ps["is_finalized"],         "engineer_features() must set is_finalized=True"
     assert ps["median_market_heat_index"]  != 50.0, "placeholder not filled"
     assert ps["median_neighborhood_score"] != 50.0, "placeholder not filled"
+
+    # assert_pop_stats_finalized must pass on a finalized dict and raise on an unfinalized one
+    assert_pop_stats_finalized(ps)
+    try:
+        assert_pop_stats_finalized(raw_ps)
+        raise AssertionError("Should have raised RuntimeError for unfinalized pop_stats")
+    except RuntimeError as e:
+        print(f"RuntimeError correctly raised: {e}")
 
     # determinism check
     _, ps2 = generate_synthetic_data()
