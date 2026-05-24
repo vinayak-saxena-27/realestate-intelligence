@@ -65,17 +65,19 @@ def validate_schema(df: pd.DataFrame) -> None:
     for col, (lo, hi) in _COLUMN_RANGES.items():
         if DATAFRAME_SCHEMA.get(col, {}).get("nullable", True) or col not in df.columns:
             continue
+        out_of_range = ~df[col].between(lo, hi)
+        if not out_of_range.any():
+            continue
         n_below = int((df[col] < lo).sum())
         n_above = int((df[col] > hi).sum())
-        if n_below or n_above:
-            parts = []
-            if n_below:
-                parts.append(f"{n_below} row(s) below minimum {lo}")
-            if n_above:
-                parts.append(f"{n_above} row(s) above maximum {hi}")
-            raise ValueError(
-                f"Column '{col}' out of range [{lo}, {hi}]: {'; '.join(parts)}"
-            )
+        parts = []
+        if n_below:
+            parts.append(f"{n_below} row(s) below minimum {lo}")
+        if n_above:
+            parts.append(f"{n_above} row(s) above maximum {hi}")
+        raise ValueError(
+            f"Column '{col}' out of range [{lo}, {hi}]: {'; '.join(parts)}"
+        )
 
 
 def validate_csv(df: pd.DataFrame) -> None:
@@ -624,6 +626,11 @@ def _get_uploaded_data_cached(
     return load_csv_data(io.BytesIO(content))
 
 
+# Stores (mtime, size, sha256_head) per path so the 64 KB read is skipped
+# when mtime and size are unchanged between calls.
+_path_key_cache: dict[str, tuple[float, int, str]] = {}
+
+
 def get_data(source=None) -> Tuple[pd.DataFrame, dict]:
     """Return (df, pop_stats) from synthetic data, a file path, or an UploadedFile.
 
@@ -634,9 +641,14 @@ def get_data(source=None) -> Tuple[pd.DataFrame, dict]:
     if source is None:
         return _get_data_cached(None, 0.0, 0, "")
     if isinstance(source, str):
-        s = os.stat(source)
-        with open(source, "rb") as fh:
-            head_hash = hashlib.sha256(fh.read(65536)).hexdigest()
+        s      = os.stat(source)
+        cached = _path_key_cache.get(source)
+        if cached and cached[0] == s.st_mtime and cached[1] == s.st_size:
+            head_hash = cached[2]
+        else:
+            with open(source, "rb") as fh:
+                head_hash = hashlib.sha256(fh.read(65536)).hexdigest()
+            _path_key_cache[source] = (s.st_mtime, s.st_size, head_hash)
         return _get_data_cached(source, s.st_mtime, s.st_size, head_hash)
     # Streamlit UploadedFile: use file_id as the sole cache discriminator
     return _get_uploaded_data_cached(source.file_id, source.getvalue())

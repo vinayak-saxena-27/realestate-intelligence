@@ -51,8 +51,8 @@ def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
     # outside that range came from a price gap wider than velocity_window.
     leading_mask = df.groupby("zip_code").cumcount() < w
     mid_series_nan = velocity.isna() & ~leading_mask
-    if mid_series_nan.any():
-        n_nan = int(mid_series_nan.sum())
+    n_nan = int(mid_series_nan.sum())
+    if n_nan:
         zips  = df.loc[mid_series_nan, "zip_code"].unique().tolist()
         logging.warning(
             "compute_price_velocity: %d mid-series NaN in %d zip(s) after ffill — "
@@ -70,12 +70,10 @@ def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
     """
     if groups is None:
         lo, hi = series.min(), series.max()
-        return pd.Series(
-            np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),
-            index=series.index,
-        )
-    lo = series.groupby(groups).transform("min")
-    hi = series.groupby(groups).transform("max")
+    else:
+        g  = series.groupby(groups)
+        lo = g.transform("min")
+        hi = g.transform("max")
     return pd.Series(
         np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),
         index=series.index,
@@ -238,23 +236,23 @@ if __name__ == "__main__":
     # ── per_metro scope ──────────────────────────────────────────────────────
     # Rebind the module global so compute_* functions pick up the new scope.
     NORMALIZATION_SCOPE = "per_metro"
+    try:
+        heat_pm = compute_market_heat_index(df)
+        nbr_pm  = compute_neighborhood_score(df)
 
-    heat_pm = compute_market_heat_index(df)
-    nbr_pm  = compute_neighborhood_score(df)
+        assert heat_pm.between(0, 100).all(),   "per_metro heat_index outside [0, 100]"
+        assert nbr_pm.between(0, 100).all(),    "per_metro neighborhood_score outside [0, 100]"
+        assert heat_pm.isna().sum() == 0,       "NaN in per_metro heat_index"
+        assert nbr_pm.isna().sum() == 0,        "NaN in per_metro neighborhood_score"
+        # Synthetic metros have different price/DOM ranges, so per_metro scores differ
+        # from global scores on the same data.
+        assert not (heat_pm == df["market_heat_index"]).all(), \
+            "per_metro and global heat_index are identical — scope has no effect"
+        assert not (nbr_pm  == df["neighborhood_score"]).all(), \
+            "per_metro and global neighborhood_score are identical — scope has no effect"
 
-    assert heat_pm.between(0, 100).all(),   "per_metro heat_index outside [0, 100]"
-    assert nbr_pm.between(0, 100).all(),    "per_metro neighborhood_score outside [0, 100]"
-    assert heat_pm.isna().sum() == 0,       "NaN in per_metro heat_index"
-    assert nbr_pm.isna().sum() == 0,        "NaN in per_metro neighborhood_score"
-    # Synthetic metros have different price/DOM ranges, so per_metro scores differ
-    # from global scores on the same data.
-    assert not (heat_pm == df["market_heat_index"]).all(), \
-        "per_metro and global heat_index are identical — scope has no effect"
-    assert not (nbr_pm  == df["neighborhood_score"]).all(), \
-        "per_metro and global neighborhood_score are identical — scope has no effect"
-
-    print("\n--- per_metro scope ---")
-    for feat, s in [("heat_index (pm)", heat_pm), ("neighborhood_score (pm)", nbr_pm)]:
-        print(f"{feat:28s}  min={s.min():8.4f}  max={s.max():8.4f}  mean={s.mean():8.4f}")
-
-    NORMALIZATION_SCOPE = "global"  # restore for any code that runs after this block
+        print("\n--- per_metro scope ---")
+        for feat, s in [("heat_index (pm)", heat_pm), ("neighborhood_score (pm)", nbr_pm)]:
+            print(f"{feat:28s}  min={s.min():8.4f}  max={s.max():8.4f}  mean={s.mean():8.4f}")
+    finally:
+        NORMALIZATION_SCOPE = "global"
