@@ -8,7 +8,7 @@ st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout="wide")
 st.title(f"{APP_ICON} {APP_TITLE}")
 
 FILE_PATH = None  # swap to 'data/market_data.csv' for production
-raw_df, pop_stats = get_data(file_path=FILE_PATH)
+raw_df, pop_stats = get_data(source=FILE_PATH)
 df, pop_stats     = engineer_features(raw_df, pop_stats)
 
 st.write(f"Loaded {len(df):,} rows across {df['metro'].nunique()} metros and {df['zip_code'].nunique()} zip codes.")
