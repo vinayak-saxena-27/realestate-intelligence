@@ -1,6 +1,8 @@
+import hashlib
+import io
 import logging
 import os
-from typing import Tuple
+from typing import BinaryIO, Tuple
 
 import numpy as np
 import pandas as pd
@@ -37,6 +39,15 @@ from config import (
 )
 
 
+_COLUMN_RANGES: dict[str, tuple] = {
+    "days_on_market":     DAYS_ON_MARKET_RANGE,
+    "homes_sold":         HOMES_SOLD_RANGE,
+    "list_to_sale_ratio": LIST_TO_SALE_RATIO_RANGE,
+    "inventory_level":    INVENTORY_LEVEL_RANGE,
+    "bachelor_rate":      BACHELOR_RATE_RANGE,
+}
+
+
 def validate_schema(df: pd.DataFrame) -> None:
     for col, spec in DATAFRAME_SCHEMA.items():
         if col not in df.columns:
@@ -50,6 +61,23 @@ def validate_schema(df: pd.DataFrame) -> None:
         elif expected_type is str:
             if not pd.api.types.is_string_dtype(df[col]):
                 raise TypeError(f"Column '{col}': expected string/object, got {df[col].dtype}")
+
+    for col, (lo, hi) in _COLUMN_RANGES.items():
+        if DATAFRAME_SCHEMA.get(col, {}).get("nullable", True) or col not in df.columns:
+            continue
+        out_of_range = ~df[col].between(lo, hi)
+        if not out_of_range.any():
+            continue
+        n_below = int((df[col] < lo).sum())
+        n_above = int((df[col] > hi).sum())
+        parts = []
+        if n_below:
+            parts.append(f"{n_below} row(s) below minimum {lo}")
+        if n_above:
+            parts.append(f"{n_above} row(s) above maximum {hi}")
+        raise ValueError(
+            f"Column '{col}' out of range [{lo}, {hi}]: {'; '.join(parts)}"
+        )
 
 
 def validate_csv(df: pd.DataFrame) -> None:
@@ -72,7 +100,6 @@ def validate_csv(df: pd.DataFrame) -> None:
     elif not (
         pd.api.types.is_integer_dtype(month_col)
         or pd.api.types.is_datetime64_any_dtype(month_col)
-        or hasattr(month_col, "dt")
     ):
         raise TypeError(
             f"CSV 'month' column must be a sortable type (string YYYY-MM, integer, or datetime), "
@@ -304,14 +331,15 @@ def _expand_to_panel(
     }
 
 
-def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
-    """Apply deliberate market patterns after base generation. Modifies df in place.
+def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Apply deliberate market patterns after base generation. Returns a new DataFrame.
 
     Operates at zip level so appreciation_rate stays uniform per zip and DOM
     changes apply to all months of the selected zips.
     Called after sorting and before the 12m-lag backfill so appreciation_rate
     is final when prior prices are back-calculated.
     """
+    df = df.copy()
     # Reset any naturally negative rates so injection is the sole source of negatives
     neg_mask = df["appreciation_rate"] < 0
     df.loc[neg_mask, "appreciation_rate"] = df.loc[neg_mask, "appreciation_rate"].abs()
@@ -339,7 +367,7 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
 
     # HOT_MARKET_COUNT zips — all DOM rows forced below HOT_DOM_CEILING
     hot_mask = df["zip_code"].isin(hot_zips)
-    df.loc[hot_mask, "days_on_market"] = rng.integers(3, HOT_DOM_CEILING, size=hot_mask.sum())
+    df.loc[hot_mask, "days_on_market"] = rng.integers(DAYS_ON_MARKET_RANGE[0], HOT_DOM_CEILING, size=hot_mask.sum())
 
     # Cap other (non-hot, non-slow) zips at SLOW_DOM_FLOOR so injection is the sole
     # source of DOM > SLOW_DOM_FLOOR — the new _compute_dom() formula can naturally
@@ -351,8 +379,9 @@ def _inject_market_patterns(df: pd.DataFrame, rng: np.random.Generator) -> None:
     # SLOW_MARKET_COUNT zips — all DOM rows forced above SLOW_DOM_FLOOR
     slow_mask = df["zip_code"].isin(slow_zips)
     df.loc[slow_mask, "days_on_market"] = rng.integers(
-        SLOW_DOM_FLOOR + 1, 121, size=slow_mask.sum()
+        SLOW_DOM_FLOOR + 1, DAYS_ON_MARKET_RANGE[1] + 1, size=slow_mask.sum()
     )
+    return df
 
 
 
@@ -371,6 +400,8 @@ def _compute_pop_stats(df: pd.DataFrame) -> dict:
         "median_investment_score":   0.0,    # placeholder — filled in Week 3
         "top_metro_appreciation":    str(metro_appr.idxmax()),
         "best_yield_metro":          str(metro_yield.idxmax()),
+        "is_finalized":              False,
+        "loaded_metros":             sorted(df["metro"].unique().tolist()),
     }
 
     missing_keys = REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())
@@ -427,7 +458,7 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
 
     # Inject before the 12m-lag backfill so appreciation_rate is final when
     # back-calculating prior prices for months 1–12 of each zip.
-    _inject_market_patterns(df, rng)
+    df = _inject_market_patterns(df, rng)
 
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
     # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
@@ -443,20 +474,26 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     return df, pop_stats
 
 
-def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
+def load_csv_data(source: str | BinaryIO) -> Tuple[pd.DataFrame, dict]:
     """
     Load and validate a real estate CSV.
     Returns the same (df, pop_stats) tuple as generate_synthetic_data().
+    Accepts either a file-path string or a file-like object (e.g. io.BytesIO).
     Raises ValueError with a clear message if required columns are missing.
     """
-    size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    if isinstance(source, str):
+        size_mb = os.path.getsize(source) / (1024 * 1024)
+    else:
+        source.seek(0, 2)
+        size_mb = source.tell() / (1024 * 1024)
+        source.seek(0)
     if size_mb > MAX_CSV_SIZE_MB:
         raise ValueError(
             f"CSV file is {size_mb:.1f} MB, which exceeds the {MAX_CSV_SIZE_MB} MB limit. "
             "Split the file or increase MAX_CSV_SIZE_MB in config.py."
         )
 
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(source)
 
     # Reuse existing validator: required columns, month format, zip/month duplicates
     validate_csv(df)
@@ -493,10 +530,20 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
     # Zip code: string, zero-padded to 5 digits
     df["zip_code"] = df["zip_code"].astype(str).str.zfill(5)
 
-    # Metro must be in METROS — fail loud, not a silent row-drop
+    # Unknown metros: warn and filter rather than hard-reject, so a CSV with
+    # a mix of known and unknown metros still loads the known rows.
     unknown = set(df["metro"].unique()) - set(METROS.keys())
     if unknown:
-        raise ValueError(f"Unknown metro values in CSV: {unknown}")
+        logging.warning(
+            "load_csv_data: ignoring %d unknown metro value(s): %s",
+            len(unknown), sorted(unknown),
+        )
+        df = df[~df["metro"].isin(unknown)].reset_index(drop=True)
+    if df.empty:
+        raise ValueError(
+            f"All rows were filtered out after removing unknown metro values: {sorted(unknown)}. "
+            "Ensure the CSV 'metro' column uses names from config.METROS."
+        )
 
     # ── Optional column defaults ─────────────────────────────────────────────
     if "bachelor_rate" not in df.columns:
@@ -562,19 +609,49 @@ def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
 @st.cache_data
 def _get_data_cached(
     file_path: str | None,
-    file_mtime: float,  # noqa: ARG001 — cache-key discriminator only; not used in body
-    file_size: int,     # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_mtime: float,      # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_size: int,         # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_head_sha256: str,  # noqa: ARG001 — cache-key discriminator only; not used in body
 ) -> Tuple[pd.DataFrame, dict]:
     if file_path is not None:
         return load_csv_data(file_path)
     return generate_synthetic_data()
 
 
-def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
-    if file_path is not None:
-        s = os.stat(file_path)
-        return _get_data_cached(file_path, s.st_mtime, s.st_size)
-    return _get_data_cached(None, 0.0, 0)
+@st.cache_data
+def _get_uploaded_data_cached(
+    file_id: str,   # noqa: ARG001 — Streamlit assigns a new file_id per upload; sole cache discriminator
+    content: bytes,
+) -> Tuple[pd.DataFrame, dict]:
+    return load_csv_data(io.BytesIO(content))
+
+
+# Stores (mtime, size, sha256_head) per path so the 64 KB read is skipped
+# when mtime and size are unchanged between calls.
+_path_key_cache: dict[str, tuple[float, int, str]] = {}
+
+
+def get_data(source=None) -> Tuple[pd.DataFrame, dict]:
+    """Return (df, pop_stats) from synthetic data, a file path, or an UploadedFile.
+
+    source=None              → synthetic data
+    source=str               → load from file path (cache key: mtime + size + head hash)
+    source=st.UploadedFile   → load from in-memory upload (cache key: file_id)
+    """
+    if source is None:
+        return _get_data_cached(None, 0.0, 0, "")
+    if isinstance(source, str):
+        s      = os.stat(source)
+        cached = _path_key_cache.get(source)
+        if cached and cached[0] == s.st_mtime and cached[1] == s.st_size:
+            head_hash = cached[2]
+        else:
+            with open(source, "rb") as fh:
+                head_hash = hashlib.sha256(fh.read(65536)).hexdigest()
+            _path_key_cache[source] = (s.st_mtime, s.st_size, head_hash)
+        return _get_data_cached(source, s.st_mtime, s.st_size, head_hash)
+    # Streamlit UploadedFile: use file_id as the sole cache discriminator
+    return _get_uploaded_data_cached(source.file_id, source.getvalue())
 
 
 if __name__ == "__main__":
@@ -584,3 +661,6 @@ if __name__ == "__main__":
     print("\npop_stats:")
     for k, v in pop_stats.items():
         print(f"  {k}: {v}")
+
+    assert not pop_stats["is_finalized"], "generate_synthetic_data() must return unfinalized pop_stats"
+    print("\nAssertion passed: pop_stats is unfinalized after generate_synthetic_data()")

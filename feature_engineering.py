@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -6,8 +7,21 @@ from config import (
     HEAT_INDEX_COMPONENTS,
     NEIGHBORHOOD_WEIGHTS,
     NET_YIELD_EXPENSE_RATIO,
+    NORMALIZATION_SCOPE,
     SYNTH_PARAMS,
 )
+
+
+def assert_pop_stats_finalized(pop_stats: dict) -> None:
+    """Raise RuntimeError if pop_stats has not been finalized by engineer_features().
+
+    Call at the top of any function that reads pop_stats for scoring or display.
+    """
+    if not pop_stats.get("is_finalized", False):
+        raise RuntimeError(
+            "pop_stats is not finalized. "
+            "Call engineer_features(df, pop_stats) before using pop_stats for scoring or display."
+        )
 
 
 def compute_yoy_appreciation(df: pd.DataFrame) -> pd.Series:
@@ -20,30 +34,46 @@ def compute_yoy_appreciation(df: pd.DataFrame) -> pd.Series:
 
 
 def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
-    w = SYNTH_PARAMS["velocity_window"]
-    return (
+    if not df.groupby("zip_code")["month"].apply(lambda x: x.is_monotonic_increasing).all():
+        raise ValueError("compute_price_velocity requires df sorted by (zip_code, month)")
+    w = int(SYNTH_PARAMS["velocity_window"])
+
+    raw = (
         df.groupby("zip_code")["median_sale_price"]
         .transform(lambda x: x.pct_change().mul(100).rolling(w).mean())
-        .fillna(0.0)
     )
 
+    # Forward-fill within each zip to bridge small mid-series gaps, capped at w rows.
+    # Leading NaN (positions 0..w-1) have no prior value, so ffill leaves them as NaN.
+    velocity = raw.groupby(df["zip_code"]).transform(lambda x: x.ffill(limit=w))
 
-def _minmax(series: pd.Series) -> pd.Series:
+    # Positions 0..w-1 per zip are the expected leading window; any remaining NaN
+    # outside that range came from a price gap wider than velocity_window.
+    leading_mask = df.groupby("zip_code").cumcount() < w
+    mid_series_nan = velocity.isna() & ~leading_mask
+    n_nan = int(mid_series_nan.sum())
+    if n_nan:
+        zips  = df.loc[mid_series_nan, "zip_code"].unique().tolist()
+        logging.warning(
+            "compute_price_velocity: %d mid-series NaN in %d zip(s) after ffill — "
+            "price gaps wider than velocity_window (%d): %s",
+            n_nan, len(zips), w, zips,
+        )
+
+    return velocity.fillna(0.0)
+
+
+def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
     """Min-max scale `series` to [0, 100]. Returns 50.0 for constant input.
 
-    WARNING — global normalization scope:
-    This function scales relative to the min/max of the entire input series,
-    which currently spans all metros, all zip codes, and all months.
-    Consequence: adding a metro with extreme values (e.g. NYC median price)
-    shifts every existing zip's market_heat_index and neighborhood_score
-    silently — no error fires, scores just change.
-
-    Long-term fix: introduce a NORMALIZATION_SCOPE flag in config.py
-    ('global' | 'per_metro') and, when set to 'per_metro', apply this
-    function inside a groupby('metro') before combining. Gate behind the
-    flag so existing behaviour is unchanged until the change is deliberate.
+    When `groups` is provided, scaling is applied independently within each group.
     """
-    lo, hi = series.min(), series.max()
+    if groups is None:
+        lo, hi = series.min(), series.max()
+    else:
+        g  = series.groupby(groups)
+        lo = g.transform("min")
+        hi = g.transform("max")
     return pd.Series(
         np.where(hi > lo, (series - lo) / (hi - lo) * 100, 50.0),
         index=series.index,
@@ -51,11 +81,12 @@ def _minmax(series: pd.Series) -> pd.Series:
 
 
 def compute_market_heat_index(df: pd.DataFrame) -> pd.Series:
-    w        = HEAT_INDEX_COMPONENTS
-    dom_inv  = 100 - _minmax(df["days_on_market"])
-    sold     = _minmax(df["homes_sold"])
-    velocity = _minmax(df["price_velocity"])
-    lts      = _minmax(df["list_to_sale_ratio"])
+    w      = HEAT_INDEX_COMPONENTS
+    groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
+    dom_inv  = 100 - _minmax(df["days_on_market"],    groups)
+    sold     = _minmax(df["homes_sold"],               groups)
+    velocity = _minmax(df["price_velocity"],           groups)
+    lts      = _minmax(df["list_to_sale_ratio"],       groups)
     return (
         dom_inv  * w["days_on_market"]
         + sold     * w["homes_sold"]
@@ -77,10 +108,11 @@ def compute_net_rental_yield(df: pd.DataFrame) -> pd.Series:
 
 
 def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
-    w    = NEIGHBORHOOD_WEIGHTS
-    inc  = _minmax(df["median_household_income"])
-    edu  = _minmax(df["bachelor_rate"])   # guaranteed by data_loader PRD 2
-    hval = _minmax(df["median_sale_price"])
+    w      = NEIGHBORHOOD_WEIGHTS
+    groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
+    inc  = _minmax(df["median_household_income"], groups)
+    edu  = _minmax(df["bachelor_rate"],           groups)  # guaranteed by data_loader PRD 2
+    hval = _minmax(df["median_sale_price"],       groups)
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
 
@@ -119,41 +151,20 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
     df["net_rental_yield"]   = compute_net_rental_yield(df)
     df["neighborhood_score"] = compute_neighborhood_score(df)
 
+    pop_stats["median_yoy_appreciation"]   = float(df["yoy_appreciation"].median())
+    pop_stats["median_gross_rental_yield"] = float(df["gross_rental_yield"].median())
     pop_stats["median_market_heat_index"]  = float(df["market_heat_index"].median())
     pop_stats["median_neighborhood_score"] = float(df["neighborhood_score"].median())
+    pop_stats["median_days_on_market"]     = float(df["days_on_market"].median())
+    pop_stats["is_finalized"]              = True
     return df, pop_stats
-
-
-_POPULATION_STATS_COLUMNS = [
-    "yoy_appreciation", "gross_rental_yield", "market_heat_index",
-    "neighborhood_score", "days_on_market",
-]
-
-
-def get_population_stats(df: pd.DataFrame) -> dict:
-    """Return population-level medians for narrative comparison.
-
-    Must be called on the output of engineer_features(), not the raw df.
-    """
-    missing = [c for c in _POPULATION_STATS_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"get_population_stats requires engineered columns — missing: {missing}. "
-            "Call engineer_features(df) first."
-        )
-    return {
-        "median_yoy_appreciation":   df["yoy_appreciation"].median(),
-        "median_gross_rental_yield": df["gross_rental_yield"].median(),
-        "median_market_heat_index":  df["market_heat_index"].median(),
-        "median_neighborhood_score": df["neighborhood_score"].median(),
-        "median_days_on_market":     df["days_on_market"].median(),
-    }
 
 
 if __name__ == "__main__":
     from data_loader import generate_synthetic_data
 
     raw, ps = generate_synthetic_data()
+    raw_ps   = ps.copy()   # snapshot before finalization
     feature_cols = [
         "yoy_appreciation", "price_velocity", "market_heat_index",
         "gross_rental_yield", "net_rental_yield", "neighborhood_score",
@@ -163,11 +174,31 @@ if __name__ == "__main__":
     df, ps = engineer_features(raw, ps)
     assert set(feature_cols).issubset(df.columns), "Missing feature columns"
     assert df.isnull().sum().sum() == 0, "NaN values in engineered df"
-    assert all(c in raw.columns for c in raw.columns), "Input df was mutated"
+    assert "yoy_appreciation" not in raw.columns, "Input df was mutated"
 
-    # pop_stats placeholders must now be real values
-    assert ps["median_market_heat_index"]  != 50.0, "placeholder not filled"
-    assert ps["median_neighborhood_score"] != 50.0, "placeholder not filled"
+    # pop_stats must be unfinalized before engineer_features() and finalized after
+    assert not raw_ps["is_finalized"], "raw pop_stats should be unfinalized"
+    assert ps["is_finalized"],         "engineer_features() must set is_finalized=True"
+
+    # all five median keys must be set to real floats by engineer_features
+    _median_keys = [
+        "median_yoy_appreciation", "median_gross_rental_yield", "median_market_heat_index",
+        "median_neighborhood_score", "median_days_on_market",
+    ]
+    for _key in _median_keys:
+        assert _key in ps,                    f"missing key: {_key}"
+        assert isinstance(ps[_key], float),   f"{_key} should be float"
+        assert ps[_key] == ps[_key],          f"{_key} is NaN"  # NaN != NaN
+    assert ps["median_market_heat_index"]  != 50.0, "heat index placeholder not replaced"
+    assert ps["median_neighborhood_score"] != 50.0, "neighborhood score placeholder not replaced"
+
+    # assert_pop_stats_finalized must pass on a finalized dict and raise on an unfinalized one
+    assert_pop_stats_finalized(ps)
+    try:
+        assert_pop_stats_finalized(raw_ps)
+        raise AssertionError("Should have raised RuntimeError for unfinalized pop_stats")
+    except RuntimeError as e:
+        print(f"RuntimeError correctly raised: {e}")
 
     # determinism check
     _, ps2 = generate_synthetic_data()
@@ -201,3 +232,27 @@ if __name__ == "__main__":
     print("\npop_stats after engineer_features:")
     for k, v in ps.items():
         print(f"  {k}: {v}")
+
+    # ── per_metro scope ──────────────────────────────────────────────────────
+    # Rebind the module global so compute_* functions pick up the new scope.
+    NORMALIZATION_SCOPE = "per_metro"
+    try:
+        heat_pm = compute_market_heat_index(df)
+        nbr_pm  = compute_neighborhood_score(df)
+
+        assert heat_pm.between(0, 100).all(),   "per_metro heat_index outside [0, 100]"
+        assert nbr_pm.between(0, 100).all(),    "per_metro neighborhood_score outside [0, 100]"
+        assert heat_pm.isna().sum() == 0,       "NaN in per_metro heat_index"
+        assert nbr_pm.isna().sum() == 0,        "NaN in per_metro neighborhood_score"
+        # Synthetic metros have different price/DOM ranges, so per_metro scores differ
+        # from global scores on the same data.
+        assert not (heat_pm == df["market_heat_index"]).all(), \
+            "per_metro and global heat_index are identical — scope has no effect"
+        assert not (nbr_pm  == df["neighborhood_score"]).all(), \
+            "per_metro and global neighborhood_score are identical — scope has no effect"
+
+        print("\n--- per_metro scope ---")
+        for feat, s in [("heat_index (pm)", heat_pm), ("neighborhood_score (pm)", nbr_pm)]:
+            print(f"{feat:28s}  min={s.min():8.4f}  max={s.max():8.4f}  mean={s.mean():8.4f}")
+    finally:
+        NORMALIZATION_SCOPE = "global"

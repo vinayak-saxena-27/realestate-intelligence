@@ -1,3 +1,5 @@
+import datetime
+
 # ── Color Palette ────────────────────────────────────────────────────────────
 COLORS: dict[str, str] = {
     "navy":       "#1B3A5C",
@@ -186,16 +188,22 @@ DAYS_ON_MARKET_RANGE:       tuple[int,   int]   = (5,       120)
 HOMES_SOLD_RANGE:           tuple[int,   int]   = (5,       200)
 LIST_TO_SALE_RATIO_RANGE:   tuple[float, float] = (0.93,  1.05)
 INVENTORY_LEVEL_RANGE:      tuple[int,   int]   = (10,     500)
-MEDIAN_INCOME_RANGE:        tuple[int,   int]   = (35_000, 180_000)
 BACHELOR_RATE_RANGE:        tuple[float, float] = (0.10,  0.75)
-FAIR_MARKET_RENT_2BR_RANGE: tuple[int,   int]   = (700,   3_500)
 
 # ── Data Generation ───────────────────────────────────────────────────────────
 RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
 APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
 N_MONTHS: int       = 24          # months of history per zip code
-DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
+# DATA_END_MONTH must remain a static string. Month labels are passed to
+# np.random.default_rng() indirectly through the panel row order, so changing
+# this value shifts every synthetic price draw and breaks RNG reproducibility.
+# Update it intentionally when the synthetic dataset needs to be re-baselined.
+DATA_END_MONTH: str = "2024-12"   # latest month in the synthetic dataset (YYYY-MM)
+
+# DISPLAY_CURRENT_MONTH is for UI labels and "as of" strings only — never
+# feed it into data generation or time-series logic.
+DISPLAY_CURRENT_MONTH: str = datetime.date.today().strftime("%Y-%m")
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
@@ -299,6 +307,8 @@ REQUIRED_POP_STAT_KEYS: frozenset[str] = frozenset({
     "median_investment_score",
     "top_metro_appreciation",
     "best_yield_metro",
+    "is_finalized",
+    "loaded_metros",
 })
 
 # ── CSV Ingestion Limits ──────────────────────────────────────────────────────
@@ -314,6 +324,11 @@ PAGE_TITLES: dict[str, str] = {
     "neighborhood": "Neighborhood Analysis",
     "data":         "Data Explorer",
 }
+
+# ── Normalization Scope ───────────────────────────────────────────────────────
+# 'global'    — min/max spans all metros (original behaviour, default)
+# 'per_metro' — min/max computed within each metro before combining
+NORMALIZATION_SCOPE: str = "global"
 
 # ── Feature Engineering & Scoring Weights ────────────────────────────────────
 NET_YIELD_EXPENSE_RATIO: float = 0.75  # 25% expense load assumption
@@ -346,6 +361,10 @@ if abs(sum(INVESTMENT_SCORE_WEIGHTS.values()) - 1.0) >= 1e-9:
     raise ValueError("INVESTMENT_SCORE_WEIGHTS must sum to 1.0")
 if abs(sum(HEAT_INDEX_COMPONENTS.values())    - 1.0) >= 1e-9:
     raise ValueError("HEAT_INDEX_COMPONENTS must sum to 1.0")
+if NORMALIZATION_SCOPE not in {"global", "per_metro"}:
+    raise ValueError(
+        f"NORMALIZATION_SCOPE must be 'global' or 'per_metro', got {NORMALIZATION_SCOPE!r}"
+    )
 if METRO_ZIP_BASE.keys() != METROS.keys():
     raise ValueError("METRO_ZIP_BASE keys must match METROS keys")
 if LOGNORMAL_BASE_PRICE.keys() != METROS.keys():
