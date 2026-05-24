@@ -1,3 +1,5 @@
+import datetime
+
 # ── Color Palette ────────────────────────────────────────────────────────────
 COLORS: dict[str, str] = {
     "navy":       "#1B3A5C",
@@ -193,7 +195,8 @@ RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
 APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
 N_MONTHS: int       = 24          # months of history per zip code
-DATA_END_MONTH: str = "2024-12"   # latest month in the dataset (YYYY-MM)
+_today = datetime.date.today()
+DATA_END_MONTH: str = (_today.replace(day=1) - datetime.timedelta(days=1)).strftime("%Y-%m")
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
