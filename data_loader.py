@@ -397,6 +397,7 @@ def _compute_pop_stats(df: pd.DataFrame) -> dict:
         "top_metro_appreciation":    str(metro_appr.idxmax()),
         "best_yield_metro":          str(metro_yield.idxmax()),
         "is_finalized":              False,
+        "loaded_metros":             sorted(df["metro"].unique().tolist()),
     }
 
     missing_keys = REQUIRED_POP_STAT_KEYS - set(pop_stats.keys())
@@ -519,10 +520,20 @@ def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
     # Zip code: string, zero-padded to 5 digits
     df["zip_code"] = df["zip_code"].astype(str).str.zfill(5)
 
-    # Metro must be in METROS — fail loud, not a silent row-drop
+    # Unknown metros: warn and filter rather than hard-reject, so a CSV with
+    # a mix of known and unknown metros still loads the known rows.
     unknown = set(df["metro"].unique()) - set(METROS.keys())
     if unknown:
-        raise ValueError(f"Unknown metro values in CSV: {unknown}")
+        logging.warning(
+            "load_csv_data: ignoring %d unknown metro value(s): %s",
+            len(unknown), sorted(unknown),
+        )
+        df = df[~df["metro"].isin(unknown)].reset_index(drop=True)
+    if df.empty:
+        raise ValueError(
+            f"All rows were filtered out after removing unknown metro values: {sorted(unknown)}. "
+            "Ensure the CSV 'metro' column uses names from config.METROS."
+        )
 
     # ── Optional column defaults ─────────────────────────────────────────────
     if "bachelor_rate" not in df.columns:
