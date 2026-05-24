@@ -153,36 +153,13 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
     df["net_rental_yield"]   = compute_net_rental_yield(df)
     df["neighborhood_score"] = compute_neighborhood_score(df)
 
+    pop_stats["median_yoy_appreciation"]   = float(df["yoy_appreciation"].median())
+    pop_stats["median_gross_rental_yield"] = float(df["gross_rental_yield"].median())
     pop_stats["median_market_heat_index"]  = float(df["market_heat_index"].median())
     pop_stats["median_neighborhood_score"] = float(df["neighborhood_score"].median())
+    pop_stats["median_days_on_market"]     = float(df["days_on_market"].median())
     pop_stats["is_finalized"]              = True
     return df, pop_stats
-
-
-_POPULATION_STATS_COLUMNS = [
-    "yoy_appreciation", "gross_rental_yield", "market_heat_index",
-    "neighborhood_score", "days_on_market",
-]
-
-
-def get_population_stats(df: pd.DataFrame) -> dict:
-    """Return population-level medians for narrative comparison.
-
-    Must be called on the output of engineer_features(), not the raw df.
-    """
-    missing = [c for c in _POPULATION_STATS_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"get_population_stats requires engineered columns — missing: {missing}. "
-            "Call engineer_features(df) first."
-        )
-    return {
-        "median_yoy_appreciation":   df["yoy_appreciation"].median(),
-        "median_gross_rental_yield": df["gross_rental_yield"].median(),
-        "median_market_heat_index":  df["market_heat_index"].median(),
-        "median_neighborhood_score": df["neighborhood_score"].median(),
-        "median_days_on_market":     df["days_on_market"].median(),
-    }
 
 
 if __name__ == "__main__":
@@ -204,8 +181,18 @@ if __name__ == "__main__":
     # pop_stats must be unfinalized before engineer_features() and finalized after
     assert not raw_ps["is_finalized"], "raw pop_stats should be unfinalized"
     assert ps["is_finalized"],         "engineer_features() must set is_finalized=True"
-    assert ps["median_market_heat_index"]  != 50.0, "placeholder not filled"
-    assert ps["median_neighborhood_score"] != 50.0, "placeholder not filled"
+
+    # all five median keys must be set to real floats by engineer_features
+    _median_keys = [
+        "median_yoy_appreciation", "median_gross_rental_yield", "median_market_heat_index",
+        "median_neighborhood_score", "median_days_on_market",
+    ]
+    for _key in _median_keys:
+        assert _key in ps,                    f"missing key: {_key}"
+        assert isinstance(ps[_key], float),   f"{_key} should be float"
+        assert ps[_key] == ps[_key],          f"{_key} is NaN"  # NaN != NaN
+    assert ps["median_market_heat_index"]  != 50.0, "heat index placeholder not replaced"
+    assert ps["median_neighborhood_score"] != 50.0, "neighborhood score placeholder not replaced"
 
     # assert_pop_stats_finalized must pass on a finalized dict and raise on an unfinalized one
     assert_pop_stats_finalized(ps)
