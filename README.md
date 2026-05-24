@@ -61,23 +61,32 @@ Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling u
 
 ### Raw DataFrame columns (output of `get_data()`)
 
+These are the columns present after `generate_synthetic_data()` or `load_csv_data()`.
+`median_sale_price_12m_ago` is added after schema validation during generation.
+
 | Column | Type | Notes |
 |---|---|---|
 | `month` | str | YYYY-MM format, 2023-01 → 2024-12 |
 | `zip_code` | str | Zero-padded 5-digit string |
 | `metro` | str | One of the 10 metros |
-| `median_sale_price` | float | Lognormal-sampled, price-floored |
+| `median_sale_price` | float | Lognormal-sampled, price-floored at `SYNTH_PARAMS["price_floor"]` |
 | `price_per_sqft` | float | `median_sale_price / sqft` |
-| `days_on_market` | int | Heat + income composite formula; seasonal overlay; clipped to (5, 120) |
-| `homes_sold` | int | Seasonal + price-scaled, clipped to (5, 200) |
-| `median_household_income` | float | Metro-anchored with zip-level noise |
-| `fair_market_rent_2br` | float | `price × gross_yield / 12`, rent-floored |
-| `median_sale_price_12m_ago` | float | 12-month lag; back-calculated for first 12 months per zip |
-| `list_to_sale_ratio` | float | Heat-correlated per zip; clipped to (0.93, 1.05) |
-| `bachelor_rate` | float | Income-correlated per zip; clipped to (0.10, 0.75) |
-| `inventory_level` | int | Inverse-heat-correlated per zip; clipped to (10, 500) |
-| `appreciation_rate` | float | Synthetic annual YoY appreciation rate in % (e.g. 8.0). Used by the 12m-lag back-calculation and `pop_stats`. Modified by market pattern injection. |
+| `days_on_market` | int | Vectorized heat + income composite (`_compute_dom()`); lognormal noise; seasonal overlay; clipped to `DAYS_ON_MARKET_RANGE` |
+| `homes_sold` | int | Seasonal + price-scaled, clipped to `HOMES_SOLD_RANGE` |
+| `median_household_income` | float | Metro-anchored with zip-level normal noise |
+| `fair_market_rent_2br` | float | `price × gross_yield / 12`, floored at `SYNTH_PARAMS["rent_floor"]` |
+| `median_sale_price_12m_ago` | float | 12-month lag; back-calculated for the first 12 months of each zip using `appreciation_rate` |
+| `list_to_sale_ratio` | float | Heat-correlated per zip; clipped to `LIST_TO_SALE_RATIO_RANGE` |
+| `bachelor_rate` | float | Income-correlated per zip; clipped to `BACHELOR_RATE_RANGE` |
+| `inventory_level` | int | Inverse-heat-correlated per zip; clipped to `INVENTORY_LEVEL_RANGE` |
+| `appreciation_rate` | float | Synthetic annual YoY appreciation rate in % (e.g. 8.0). Seed for 12m-lag back-calculation and `pop_stats`. Modified by `_inject_market_patterns()`. |
 | `median_list_price` | float | `median_sale_price × list_to_sale_ratio` with monthly noise |
+
+### Derived data helpers
+
+| Function | Returns | Notes |
+|---|---|---|
+| `get_price_history_df(df, zip_code)` | `DataFrame` | Long-format price history for one zip: `month`, `median_sale_price`, `zip_code`. Sorted oldest → newest. Raises `ValueError` if zip not found. Used by chart factory functions. |
 
 ### Engineered DataFrame columns (output of `engineer_features()`)
 
@@ -98,14 +107,14 @@ Fully reproducible — seeded with `np.random.default_rng(42)`. Price sampling u
 from data_loader import get_data
 from feature_engineering import engineer_features, get_population_stats
 
-raw_df, pop_stats = get_data()                        # cached raw panel + partial pop_stats
+raw_df, pop_stats = get_data()                            # cached raw panel + partial pop_stats
 df, pop_stats     = engineer_features(raw_df, pop_stats)  # adds 6 feature columns; fills 2 pop_stats keys
-pop               = get_population_stats(df)          # population-level medians for narrative context
+pop               = get_population_stats(df)              # population-level medians for narrative context
 ```
 
-`engineer_features(df, pop_stats)` accepts the `pop_stats` dict from `get_data()`, fills in `median_market_heat_index` and `median_neighborhood_score` with real computed medians (replacing the 50.0 placeholders), and returns `(df, pop_stats)`. It raises `ValueError` with a descriptive message if any required input column is missing. It always operates on a copy of the input — the cached raw DataFrame is never mutated.
+`engineer_features(df, pop_stats)` accepts the `pop_stats` dict from `get_data()`, fills in `median_market_heat_index` and `median_neighborhood_score` with real computed medians (replacing the 50.0 placeholders from `_compute_pop_stats`), and returns `(df, pop_stats)`. It raises `ValueError` with a descriptive message if any required input column is missing. It sorts by `(zip_code, month)` before computing time-series features to guarantee correct ordering. It always operates on a copy of the input — the cached raw DataFrame is never mutated.
 
-`get_population_stats()` raises `ValueError` if called on a raw (non-engineered) DataFrame.
+`get_population_stats(df)` returns all five population medians from an already-engineered DataFrame. Raises `ValueError` if called before `engineer_features()` (i.e., if the engineered columns are absent).
 
 ### Feature definitions
 
@@ -140,13 +149,13 @@ All constants live in `config.py`. Nothing is hardcoded in application logic.
 | `DATAFRAME_SCHEMA` | Column types + nullable flag for the raw output schema |
 | `REQUIRED_CSV_COLUMNS` | 9 columns that must be present or `validate_csv()` raises — includes `month` (required for time-series features) |
 | `OPTIONAL_CSV_COLUMNS` | 6 columns used if present; defaults applied if absent (`bachelor_rate`→0.35, `list_to_sale_ratio`→0.98, `inventory_level`→100, `appreciation_rate`→5.0, `median_list_price` back-calculated, `yoy_appreciation` from 12m lag) |
-| `DAYS_ON_MARKET_RANGE` | `(5, 120)` — clip bounds and validation range |
-| `HOMES_SOLD_RANGE` | `(5, 200)` |
-| `LIST_TO_SALE_RATIO_RANGE` | `(0.93, 1.05)` |
-| `INVENTORY_LEVEL_RANGE` | `(10, 500)` |
-| `MEDIAN_INCOME_RANGE` | `(35_000, 180_000)` |
-| `BACHELOR_RATE_RANGE` | `(0.10, 0.75)` |
-| `FAIR_MARKET_RENT_2BR_RANGE` | `(700, 3_500)` |
+| `DAYS_ON_MARKET_RANGE` | `(5, 120)` — clip bounds for synthetic generation; imported by `validate_schema()` for future range enforcement |
+| `HOMES_SOLD_RANGE` | `(5, 200)` — same pattern |
+| `LIST_TO_SALE_RATIO_RANGE` | `(0.93, 1.05)` — same pattern |
+| `INVENTORY_LEVEL_RANGE` | `(10, 500)` — same pattern |
+| `MEDIAN_INCOME_RANGE` | `(35_000, 180_000)` — same pattern |
+| `BACHELOR_RATE_RANGE` | `(0.10, 0.75)` — same pattern |
+| `FAIR_MARKET_RENT_2BR_RANGE` | `(700, 3_500)` — same pattern |
 
 `validate_csv()` additionally checks that the `month` column is parseable as a date and that no `(zip_code, month)` pair is duplicated — both are required for correct time-series feature computation.
 
@@ -201,7 +210,8 @@ Applied after base synthetic generation to create realistic market variation for
 
 | Function | Strategy |
 |---|---|
-| `get_data()` | `@st.cache_data` — raw panel + partial `pop_stats` computed once per session |
+| `_get_data_cached(file_path, file_mtime, file_size)` | `@st.cache_data` — keyed on path + mtime + size so any file change invalidates the cache |
+| `get_data(file_path)` | Thin wrapper — reads `os.stat()` for cache keys, then calls `_get_data_cached`. No-arg call uses sentinel `(None, 0.0, 0)` to return the synthetic dataset. |
 | `engineer_features(df, pop_stats)` | `@st.cache_data` — engineered DataFrame + completed `pop_stats` computed once from cached raw |
 | `get_population_stats(df)` | No cache — fast dict from already-cached engineered DataFrame |
 | Individual `compute_*()` functions | No cache — called only inside `engineer_features()` |
