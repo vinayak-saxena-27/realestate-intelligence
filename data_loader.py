@@ -2,7 +2,7 @@ import hashlib
 import io
 import logging
 import os
-from typing import Tuple
+from typing import BinaryIO, Tuple
 
 import numpy as np
 import pandas as pd
@@ -474,7 +474,7 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     return df, pop_stats
 
 
-def load_csv_data(source: "str | io.IOBase") -> Tuple[pd.DataFrame, dict]:
+def load_csv_data(source: str | BinaryIO) -> Tuple[pd.DataFrame, dict]:
     """
     Load and validate a real estate CSV.
     Returns the same (df, pop_stats) tuple as generate_synthetic_data().
