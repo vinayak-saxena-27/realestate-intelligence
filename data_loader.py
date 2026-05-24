@@ -37,6 +37,15 @@ from config import (
 )
 
 
+_COLUMN_RANGES: dict[str, tuple] = {
+    "days_on_market":     DAYS_ON_MARKET_RANGE,
+    "homes_sold":         HOMES_SOLD_RANGE,
+    "list_to_sale_ratio": LIST_TO_SALE_RATIO_RANGE,
+    "inventory_level":    INVENTORY_LEVEL_RANGE,
+    "bachelor_rate":      BACHELOR_RATE_RANGE,
+}
+
+
 def validate_schema(df: pd.DataFrame) -> None:
     for col, spec in DATAFRAME_SCHEMA.items():
         if col not in df.columns:
@@ -50,6 +59,21 @@ def validate_schema(df: pd.DataFrame) -> None:
         elif expected_type is str:
             if not pd.api.types.is_string_dtype(df[col]):
                 raise TypeError(f"Column '{col}': expected string/object, got {df[col].dtype}")
+
+    for col, (lo, hi) in _COLUMN_RANGES.items():
+        if DATAFRAME_SCHEMA.get(col, {}).get("nullable", True) or col not in df.columns:
+            continue
+        n_below = int((df[col] < lo).sum())
+        n_above = int((df[col] > hi).sum())
+        if n_below or n_above:
+            parts = []
+            if n_below:
+                parts.append(f"{n_below} row(s) below minimum {lo}")
+            if n_above:
+                parts.append(f"{n_above} row(s) above maximum {hi}")
+            raise ValueError(
+                f"Column '{col}' out of range [{lo}, {hi}]: {'; '.join(parts)}"
+            )
 
 
 def validate_csv(df: pd.DataFrame) -> None:
