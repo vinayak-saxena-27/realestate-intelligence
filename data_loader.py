@@ -1,3 +1,5 @@
+import hashlib
+import io
 import logging
 import os
 from typing import Tuple
@@ -470,20 +472,26 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     return df, pop_stats
 
 
-def load_csv_data(file_path: str) -> Tuple[pd.DataFrame, dict]:
+def load_csv_data(source: "str | io.IOBase") -> Tuple[pd.DataFrame, dict]:
     """
     Load and validate a real estate CSV.
     Returns the same (df, pop_stats) tuple as generate_synthetic_data().
+    Accepts either a file-path string or a file-like object (e.g. io.BytesIO).
     Raises ValueError with a clear message if required columns are missing.
     """
-    size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    if isinstance(source, str):
+        size_mb = os.path.getsize(source) / (1024 * 1024)
+    else:
+        source.seek(0, 2)
+        size_mb = source.tell() / (1024 * 1024)
+        source.seek(0)
     if size_mb > MAX_CSV_SIZE_MB:
         raise ValueError(
             f"CSV file is {size_mb:.1f} MB, which exceeds the {MAX_CSV_SIZE_MB} MB limit. "
             "Split the file or increase MAX_CSV_SIZE_MB in config.py."
         )
 
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(source)
 
     # Reuse existing validator: required columns, month format, zip/month duplicates
     validate_csv(df)
@@ -599,19 +607,39 @@ def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
 @st.cache_data
 def _get_data_cached(
     file_path: str | None,
-    file_mtime: float,  # noqa: ARG001 — cache-key discriminator only; not used in body
-    file_size: int,     # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_mtime: float,      # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_size: int,         # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_head_sha256: str,  # noqa: ARG001 — cache-key discriminator only; not used in body
 ) -> Tuple[pd.DataFrame, dict]:
     if file_path is not None:
         return load_csv_data(file_path)
     return generate_synthetic_data()
 
 
-def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
-    if file_path is not None:
-        s = os.stat(file_path)
-        return _get_data_cached(file_path, s.st_mtime, s.st_size)
-    return _get_data_cached(None, 0.0, 0)
+@st.cache_data
+def _get_uploaded_data_cached(
+    file_id: str,   # noqa: ARG001 — Streamlit assigns a new file_id per upload; sole cache discriminator
+    content: bytes,
+) -> Tuple[pd.DataFrame, dict]:
+    return load_csv_data(io.BytesIO(content))
+
+
+def get_data(source=None) -> Tuple[pd.DataFrame, dict]:
+    """Return (df, pop_stats) from synthetic data, a file path, or an UploadedFile.
+
+    source=None              → synthetic data
+    source=str               → load from file path (cache key: mtime + size + head hash)
+    source=st.UploadedFile   → load from in-memory upload (cache key: file_id)
+    """
+    if source is None:
+        return _get_data_cached(None, 0.0, 0, "")
+    if isinstance(source, str):
+        s = os.stat(source)
+        with open(source, "rb") as fh:
+            head_hash = hashlib.sha256(fh.read(65536)).hexdigest()
+        return _get_data_cached(source, s.st_mtime, s.st_size, head_hash)
+    # Streamlit UploadedFile: use file_id as the sole cache discriminator
+    return _get_uploaded_data_cached(source.file_id, source.getvalue())
 
 
 if __name__ == "__main__":
