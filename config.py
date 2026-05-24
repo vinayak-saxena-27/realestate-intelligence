@@ -195,8 +195,15 @@ RNG_SEED: int       = 42
 PRICE_ROUND_DP: int = 2   # decimal places for prices, income, and rent
 APPR_ROUND_DP: int  = 4   # decimal places for yoy_appreciation
 N_MONTHS: int       = 24          # months of history per zip code
-_today = datetime.date.today()
-DATA_END_MONTH: str = (_today.replace(day=1) - datetime.timedelta(days=1)).strftime("%Y-%m")
+# DATA_END_MONTH must remain a static string. Month labels are passed to
+# np.random.default_rng() indirectly through the panel row order, so changing
+# this value shifts every synthetic price draw and breaks RNG reproducibility.
+# Update it intentionally when the synthetic dataset needs to be re-baselined.
+DATA_END_MONTH: str = "2024-12"   # latest month in the synthetic dataset (YYYY-MM)
+
+# DISPLAY_CURRENT_MONTH is for UI labels and "as of" strings only — never
+# feed it into data generation or time-series logic.
+DISPLAY_CURRENT_MONTH: str = datetime.date.today().strftime("%Y-%m")
 
 # ── DataFrame Schema ──────────────────────────────────────────────────────────
 # Contract between the data layer and the rest of the app.
