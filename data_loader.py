@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from typing import Tuple
@@ -599,8 +600,9 @@ def get_price_history_df(df: pd.DataFrame, zip_code: str) -> pd.DataFrame:
 @st.cache_data
 def _get_data_cached(
     file_path: str | None,
-    file_mtime: float,  # noqa: ARG001 — cache-key discriminator only; not used in body
-    file_size: int,     # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_mtime: float,   # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_size: int,      # noqa: ARG001 — cache-key discriminator only; not used in body
+    file_head_sha256: str,  # noqa: ARG001 — cache-key discriminator only; not used in body
 ) -> Tuple[pd.DataFrame, dict]:
     if file_path is not None:
         return load_csv_data(file_path)
@@ -610,8 +612,10 @@ def _get_data_cached(
 def get_data(file_path: str | None = None) -> Tuple[pd.DataFrame, dict]:
     if file_path is not None:
         s = os.stat(file_path)
-        return _get_data_cached(file_path, s.st_mtime, s.st_size)
-    return _get_data_cached(None, 0.0, 0)
+        with open(file_path, "rb") as fh:
+            head_hash = hashlib.sha256(fh.read(65536)).hexdigest()
+        return _get_data_cached(file_path, s.st_mtime, s.st_size, head_hash)
+    return _get_data_cached(None, 0.0, 0, "")
 
 
 if __name__ == "__main__":
