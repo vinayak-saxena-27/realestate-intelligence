@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -36,11 +37,30 @@ def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
     if not df.groupby("zip_code")["month"].apply(lambda x: x.is_monotonic_increasing).all():
         raise ValueError("compute_price_velocity requires df sorted by (zip_code, month)")
     w = int(SYNTH_PARAMS["velocity_window"])
-    return (
+
+    raw = (
         df.groupby("zip_code")["median_sale_price"]
         .transform(lambda x: x.pct_change().mul(100).rolling(w).mean())
-        .fillna(0.0)
     )
+
+    # Forward-fill within each zip to bridge small mid-series gaps, capped at w rows.
+    # Leading NaN (positions 0..w-1) have no prior value, so ffill leaves them as NaN.
+    velocity = raw.groupby(df["zip_code"]).transform(lambda x: x.ffill(limit=w))
+
+    # Positions 0..w-1 per zip are the expected leading window; any remaining NaN
+    # outside that range came from a price gap wider than velocity_window.
+    leading_mask = df.groupby("zip_code").cumcount() < w
+    mid_series_nan = velocity.isna() & ~leading_mask
+    if mid_series_nan.any():
+        n_nan = int(mid_series_nan.sum())
+        zips  = df.loc[mid_series_nan, "zip_code"].unique().tolist()
+        logging.warning(
+            "compute_price_velocity: %d mid-series NaN in %d zip(s) after ffill — "
+            "price gaps wider than velocity_window (%d): %s",
+            n_nan, len(zips), w, zips,
+        )
+
+    return velocity.fillna(0.0)
 
 
 def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
