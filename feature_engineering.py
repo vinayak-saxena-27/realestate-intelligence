@@ -96,6 +96,13 @@ def compute_market_heat_index(df: pd.DataFrame) -> pd.Series:
 
 
 def compute_gross_rental_yield(df: pd.DataFrame) -> pd.Series:
+    # LEAKAGE AUDIT — WARN (accepted): yield = rent × 12 / price × 100, so
+    # median_sale_price appears in the denominator.  The RF can theoretically
+    # invert this to recover price_t and scale it to price_t+6.  However, no
+    # future values are used — the yield is computed from the same-period price
+    # and rent, making this autoregressive, not target leakage.  It is the
+    # primary driver of R² > 0.92 on synthetic data where rent tracks price
+    # closely.  Do not remove without re-evaluating the PRD feature set.
     annual_rent = df["fair_market_rent_2br"] * 12
     return pd.Series(
         np.where(df["median_sale_price"] > 0, annual_rent / df["median_sale_price"] * 100, 0.0),
@@ -112,6 +119,12 @@ def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
     groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
     inc  = _minmax(df["median_household_income"], groups)
     edu  = _minmax(df["bachelor_rate"],           groups)  # guaranteed by data_loader PRD 2
+    # LEAKAGE AUDIT — WARN (accepted): median_sale_price is included as a
+    # 30%-weighted component (home_value proxy).  This makes neighborhood_score
+    # a partial proxy for the current price level.  The RF target is price_t+6,
+    # and price_t is used here — autoregressive, not future leakage.  It is a
+    # secondary driver of R² > 0.92.  _refit_rf_features() in models.py refits
+    # this feature's normalization on train rows only before the RF sees it.
     hval = _minmax(df["median_sale_price"],       groups)
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
