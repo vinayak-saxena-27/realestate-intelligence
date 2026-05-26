@@ -254,11 +254,17 @@ OPTIONAL_CSV_COLUMNS: list[str] = [
 ]
 
 # ── Model Parameters ──────────────────────────────────────────────────────────
-# Passed directly via **RF_PARAMS / **KMEANS_PARAMS in models.py
-RF_PARAMS: dict[str, int] = {
-    "n_estimators": 100,
-    "random_state": 42,
-}
+RF_N_ESTIMATORS: int       = 100
+RF_N_JOBS:       int       = -1
+RF_MAX_DEPTH:    int | None = None   # None = fully grown; set to 10 if overfitting
+
+RF_FEATURES: list[str] = [
+    "yoy_appreciation",
+    "price_velocity",
+    "market_heat_index",
+    "neighborhood_score",
+    "gross_rental_yield",
+]
 
 KMEANS_PARAMS: dict[str, int] = {
     "n_clusters":   5,
