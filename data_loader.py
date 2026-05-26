@@ -463,6 +463,15 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
     # 12-month lag price: actual shifted value where available; for the first 12 months of each
     # zip (where no prior-year row exists), back-calculate from appreciation_rate (%).
     # appreciation_rate is never overwritten by engineer_features() — no order-of-ops risk.
+    #
+    # LEAKAGE AUDIT — WARN (accepted): for months 1–12 of each zip, the shifted
+    # price does not exist, so median_sale_price_12m_ago is derived algebraically
+    # from appreciation_rate.  This means yoy_appreciation ≈ appreciation_rate
+    # for those rows (engineer_features() computes yoy from the same lag column).
+    # appreciation_rate is a time-invariant zip label set before any ML training,
+    # not a future-derived value, so no real-world leakage risk exists.  This is
+    # a synthetic-data constraint: a real dataset would have 24+ months of history
+    # and the back-calculation path would never be reached.
     df["median_sale_price_12m_ago"] = df.groupby("zip_code")["median_sale_price"].shift(12)
     early = df["median_sale_price_12m_ago"].isna()
     df.loc[early, "median_sale_price_12m_ago"] = np.round(
