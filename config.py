@@ -266,10 +266,18 @@ RF_FEATURES: list[str] = [
     "gross_rental_yield",
 ]
 
-KMEANS_PARAMS: dict[str, int] = {
-    "n_clusters":   5,
-    "random_state": 42,
-}
+KMEANS_K:        int = 5
+KMEANS_N_INIT:   int = 10
+KMEANS_MAX_ITER: int = 300
+
+KMEANS_FEATURES: list[str] = [
+    "yoy_appreciation",
+    "market_heat_index",
+    "gross_rental_yield",
+    "neighborhood_score",
+    "days_on_market",
+    "price_per_sqft",
+]
 
 # ── Investment Grade Thresholds ───────────────────────────────────────────────
 # Ordered high → low; scoring.py iterates and returns the first match.
@@ -377,9 +385,9 @@ if LOGNORMAL_BASE_PRICE.keys() != METROS.keys():
     raise ValueError("LOGNORMAL_BASE_PRICE keys must match METROS keys")
 if len(CHART_COLORS) != 6:
     raise ValueError("CHART_COLORS must contain exactly 6 hex strings")
-if len(SEGMENT_LABELS) != KMEANS_PARAMS["n_clusters"]:
+if len(SEGMENT_LABELS) != KMEANS_K:
     raise ValueError(
-        f"SEGMENT_LABELS must have one entry per cluster (n_clusters={KMEANS_PARAMS['n_clusters']})"
+        f"SEGMENT_LABELS must have one entry per cluster (KMEANS_K={KMEANS_K})"
     )
 _scores = [g["min_score"] for g in GRADE_THRESHOLDS]
 if _scores != sorted(_scores, reverse=True):

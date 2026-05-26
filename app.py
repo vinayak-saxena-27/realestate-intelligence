@@ -3,7 +3,7 @@ import streamlit as st
 from config import APP_ICON, APP_TITLE, RF_FEATURES
 from data_loader import get_data
 from feature_engineering import engineer_features
-from models import predict_prices, train_price_model
+from models import label_segments, predict_prices, train_price_model, train_segment_model
 from scoring import compute_investment_score
 
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout="wide")
@@ -21,6 +21,11 @@ st.session_state["price_importances"] = dict(zip(RF_FEATURES, price_model.featur
 
 df = compute_investment_score(df)
 pop_stats["median_investment_score"] = float(df["investment_score"].median())
+
+kmeans_model, kmeans_scaler          = train_segment_model(df)
+df["market_segment"]                 = label_segments(df, kmeans_model, kmeans_scaler)
+st.session_state["kmeans_model"]     = kmeans_model
+st.session_state["kmeans_scaler"]    = kmeans_scaler
 
 st.write(f"Loaded {len(df):,} rows across {df['metro'].nunique()} metros and {df['zip_code'].nunique()} zip codes.")
 st.dataframe(df.head(20))
