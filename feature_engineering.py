@@ -13,13 +13,13 @@ from config import (
 
 
 def assert_pop_stats_finalized(pop_stats: dict) -> None:
-    """Raise RuntimeError if pop_stats has not been finalized by engineer_features().
+    """Raise ValueError if pop_stats has not been finalized by engineer_features().
 
     Call at the top of any function that reads pop_stats for scoring or display.
     """
     if not pop_stats.get("is_finalized", False):
-        raise RuntimeError(
-            "pop_stats is not finalized. "
+        raise ValueError(
+            "pop_stats is not finalized: median fields still contain placeholders. "
             "Call engineer_features(df, pop_stats) before using pop_stats for scoring or display."
         )
 
@@ -61,6 +61,34 @@ def compute_price_velocity(df: pd.DataFrame) -> pd.Series:
         )
 
     return velocity.fillna(0.0)
+
+
+def compute_volume_trend(df: pd.DataFrame) -> pd.Series:
+    # 3-month rolling mean of MoM % change in homes_sold per zip.
+    # Positive: accelerating transaction volume; negative: contracting. Source: homes_sold.
+    if not df.groupby("zip_code")["month"].apply(lambda x: x.is_monotonic_increasing).all():
+        raise ValueError("compute_volume_trend requires df sorted by (zip_code, month)")
+    w = int(SYNTH_PARAMS["velocity_window"])
+
+    raw = (
+        df.groupby("zip_code")["homes_sold"]
+        .transform(lambda x: x.pct_change().mul(100).rolling(w).mean())
+    )
+
+    # Positions 0..w-1 per zip are the expected leading window (no prior data).
+    # Any remaining NaN outside that range came from a homes_sold gap wider than w.
+    leading_mask = df.groupby("zip_code").cumcount() < w
+    mid_series_nan = raw.isna() & ~leading_mask
+    n_nan = int(mid_series_nan.sum())
+    if n_nan:
+        zips = df.loc[mid_series_nan, "zip_code"].unique().tolist()
+        logging.warning(
+            "compute_volume_trend: %d mid-series NaN in %d zip(s) — "
+            "homes_sold gaps wider than velocity_window (%d): %s",
+            n_nan, len(zips), w, zips,
+        )
+
+    return raw.fillna(0.0)
 
 
 def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
@@ -117,7 +145,7 @@ def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
 
 
 _REQUIRED_COLUMNS = [
-    "zip_code",              # groupby key for price_velocity
+    "zip_code",              # groupby key for price_velocity and volume_trend
     "month",                 # sort key for correct time-series ordering
     "median_sale_price",
     "median_sale_price_12m_ago",
@@ -134,7 +162,7 @@ _REQUIRED_COLUMNS = [
 def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, dict]:
     """Run full feature engineering pipeline on raw data.
 
-    Returns (df, pop_stats) where df has 6 new feature columns and pop_stats
+    Returns (df, pop_stats) where df has 7 new feature columns and pop_stats
     has its 50.0 placeholders replaced with real medians. Input df is never mutated.
     """
     missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
@@ -146,6 +174,7 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
     df = df.sort_values(["zip_code", "month"]).reset_index(drop=True)
     df["yoy_appreciation"]   = compute_yoy_appreciation(df)
     df["price_velocity"]     = compute_price_velocity(df)
+    df["volume_trend"]       = compute_volume_trend(df)
     df["market_heat_index"]  = compute_market_heat_index(df)
     df["gross_rental_yield"] = compute_gross_rental_yield(df)
     df["net_rental_yield"]   = compute_net_rental_yield(df)
@@ -166,8 +195,8 @@ if __name__ == "__main__":
     raw, ps = generate_synthetic_data()
     raw_ps   = ps.copy()   # snapshot before finalization
     feature_cols = [
-        "yoy_appreciation", "price_velocity", "market_heat_index",
-        "gross_rental_yield", "net_rental_yield", "neighborhood_score",
+        "yoy_appreciation", "price_velocity", "volume_trend",
+        "market_heat_index", "gross_rental_yield", "net_rental_yield", "neighborhood_score",
     ]
 
     # engineer_features must not mutate the input df
@@ -196,9 +225,9 @@ if __name__ == "__main__":
     assert_pop_stats_finalized(ps)
     try:
         assert_pop_stats_finalized(raw_ps)
-        raise AssertionError("Should have raised RuntimeError for unfinalized pop_stats")
-    except RuntimeError as e:
-        print(f"RuntimeError correctly raised: {e}")
+        raise AssertionError("Should have raised ValueError for unfinalized pop_stats")
+    except ValueError as e:
+        print(f"ValueError correctly raised: {e}")
 
     # determinism check
     _, ps2 = generate_synthetic_data()
@@ -220,7 +249,7 @@ if __name__ == "__main__":
     assert (df["neighborhood_score"].between(0, 100)).all()
 
     print("\n--- PRD 1 features ---")
-    for feat in ["yoy_appreciation", "price_velocity", "market_heat_index"]:
+    for feat in ["yoy_appreciation", "price_velocity", "volume_trend", "market_heat_index"]:
         s = df[feat].agg(["min", "max", "mean"])
         print(f"{feat:24s}  min={s['min']:8.4f}  max={s['max']:8.4f}  mean={s['mean']:8.4f}")
 
