@@ -31,7 +31,7 @@ realestate-intelligence/
 ├── app.py                   # Streamlit entry point — load → engineer → model → score → segment
 ├── config.py                # Single source of truth for all constants and weights
 ├── data_loader.py           # Synthetic data generation, schema validation, CSV ingestion
-├── feature_engineering.py  # Six feature functions + engineer_features() pipeline
+├── feature_engineering.py  # Seven feature functions + engineer_features() pipeline
 ├── models.py                # Random Forest price forecasting + K-Means segmentation
 ├── scoring.py               # Investment score composite + letter grade assignment
 ├── charts.py                # Plotly chart factory functions (Week 4)
@@ -90,12 +90,13 @@ These are the columns present after `generate_synthetic_data()` or `load_csv_dat
 
 ### Engineered DataFrame columns (output of `engineer_features()`)
 
-`engineer_features()` adds six columns to a copy of the raw DataFrame. All weights and thresholds are read from `config.py` — no literals in function bodies.
+`engineer_features()` adds seven columns to a copy of the raw DataFrame. All weights and thresholds are read from `config.py` — no literals in function bodies.
 
 | Column | Range | Built by |
 |---|---|---|
 | `yoy_appreciation` | −5% to +25% | `compute_yoy_appreciation()` |
 | `price_velocity` | −2% to +5% | `compute_price_velocity()` |
+| `volume_trend` | −20% to +25% | `compute_volume_trend()` |
 | `market_heat_index` | 0 to 100 | `compute_market_heat_index()` |
 | `gross_rental_yield` | 2% to 12% | `compute_gross_rental_yield()` |
 | `net_rental_yield` | 1.5% to 9% | `compute_net_rental_yield()` |
@@ -108,7 +109,7 @@ from data_loader import get_data
 from feature_engineering import engineer_features
 
 raw_df, pop_stats = get_data()                            # cached raw panel + partial pop_stats
-df, pop_stats     = engineer_features(raw_df, pop_stats)  # adds 6 feature columns; fills pop_stats medians
+df, pop_stats     = engineer_features(raw_df, pop_stats)  # adds 7 feature columns; fills pop_stats medians
 ```
 
 `engineer_features(df, pop_stats)` accepts the `pop_stats` dict from `get_data()`, fills in `median_market_heat_index` and `median_neighborhood_score` with real computed medians (replacing the 50.0 placeholders from `_compute_pop_stats`), and returns `(df, pop_stats)`. It raises `ValueError` with a descriptive message if any required input column is missing. It sorts by `(zip_code, month)` before computing time-series features to guarantee correct ordering. It always operates on a copy of the input — the cached raw DataFrame is never mutated.
@@ -118,7 +119,8 @@ df, pop_stats     = engineer_features(raw_df, pop_stats)  # adds 6 feature colum
 | Feature | Formula | Notes |
 |---|---|---|
 | `yoy_appreciation` | `(price − price_12m_ago) / price_12m_ago × 100` | Divide-by-zero guarded; first 12 months use back-calculated prior price |
-| `price_velocity` | 3-month rolling mean of MoM % change, per zip | Window size from `SYNTH_PARAMS["velocity_window"]`; grouped by zip to avoid cross-zip boundary artefacts |
+| `price_velocity` | 3-month rolling mean of MoM % change in `median_sale_price`, per zip | Window size from `SYNTH_PARAMS["velocity_window"]`; grouped by zip to avoid cross-zip boundary artefacts |
+| `volume_trend` | 3-month rolling mean of MoM % change in `homes_sold`, per zip | Same window and groupby pattern as `price_velocity`; positive = accelerating volume, negative = contracting |
 | `market_heat_index` | Weighted sum of four min-max normalised components | Components: DOM (inverted, 35%), homes_sold (30%), price_velocity (20%), list_to_sale (15%) |
 | `gross_rental_yield` | `(rent × 12) / price × 100` | Divide-by-zero guarded |
 | `net_rental_yield` | `gross_rental_yield × NET_YIELD_EXPENSE_RATIO` | Ratio (0.75) from config — no literals in function |
@@ -160,7 +162,7 @@ K-Means clustering (k=5) assigns each row to a named market segment. Labels are 
 
 ## Scoring
 
-`compute_investment_score(df)` returns a copy of `df` with 8 new columns: 6 weighted component scores, `investment_score` (0–100), and `investment_grade` (A–F).
+`compute_investment_score(df, pop_stats)` returns a copy of `df` with 8 new columns: 6 weighted component scores, `investment_score` (0–100), and `investment_grade` (A–F). It calls `assert_pop_stats_finalized(pop_stats)` at entry — `ValueError` is raised if `engineer_features()` has not yet been called.
 
 ### Investment score components
 
