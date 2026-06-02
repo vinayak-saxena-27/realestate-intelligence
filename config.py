@@ -331,11 +331,14 @@ MAX_CSV_SIZE_MB: int = 50   # reject files larger than this before reading into 
 APP_TITLE: str  = "Real Estate Investment Intelligence"
 APP_ICON:  str  = "🏠"
 PAGE_TITLES: dict[str, str] = {
-    "overview":     "Market Overview",
-    "scoring":      "Investment Scoring",
-    "segments":     "Market Segments",
-    "neighborhood": "Neighborhood Analysis",
-    "data":         "Data Explorer",
+    "overview":       "Market Overview",
+    "scoring":        "Investment Scoring",
+    "segments":       "Market Segments",
+    "neighborhood":   "Neighborhood Analysis",
+    "data":           "Data Explorer",
+    "command_center": "Command Center",
+    "explorer":       "Zip Code Explorer",
+    "deep_dive":      "Zip Code Deep Dive",
 }
 
 # ── Normalization Scope ───────────────────────────────────────────────────────
