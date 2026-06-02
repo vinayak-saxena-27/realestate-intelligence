@@ -130,13 +130,14 @@ def create_score_components(row: pd.Series, df: pd.DataFrame) -> go.Figure:
 
 
 def create_top10_table(df: pd.DataFrame) -> pd.DataFrame:
-    """Top 10 zip codes by investment score as a display-ready DataFrame."""
+    """Top 10 zip codes by investment score as a display-ready DataFrame (latest month snapshot)."""
     cols = [
         "zip_code", "metro", "investment_score", "investment_grade",
         "yoy_appreciation", "gross_rental_yield",
     ]
+    latest = df[df["month"] == df["month"].max()]
     top10 = (
-        df.nlargest(10, "investment_score")[cols]
+        latest.nlargest(10, "investment_score")[cols]
         .reset_index(drop=True)
     )
     top10.insert(0, "rank", range(1, 11))
