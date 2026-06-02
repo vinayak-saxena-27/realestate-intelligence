@@ -1,0 +1,111 @@
+import pandas as pd
+import streamlit as st
+
+from _styles import inject_css
+from config import APP_ICON, COLORS, GRADE_COLORS, GRADE_THRESHOLDS, PAGE_TITLES
+
+st.set_page_config(page_title=PAGE_TITLES["explorer"], page_icon=APP_ICON, layout="wide")
+inject_css()
+st.title(PAGE_TITLES["explorer"])
+
+# ── Session state guard ───────────────────────────────────────────────────────
+if "df" not in st.session_state or st.session_state["df"] is None:
+    st.warning("No data loaded — please navigate to the home page first.")
+    st.stop()
+
+df        = st.session_state["df"]
+pop_stats = st.session_state["pop_stats"]
+
+if df.empty:
+    st.warning("No data available — check your data source.")
+    st.stop()
+
+latest = df[df["month"] == df["month"].max()]
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def grade_badge(grade: str) -> str:
+    color = GRADE_COLORS.get(grade, COLORS["navy"])
+    label = {g["letter"]: g["label"] for g in GRADE_THRESHOLDS}.get(grade, grade)
+    return (
+        f'<span style="background:{color};color:white;padding:2px 10px;'
+        f'border-radius:12px;font-size:12px;font-weight:bold">{grade} — {label}</span>'
+    )
+
+
+def colored_pct(value: float, median: float) -> str:
+    color = COLORS["green"] if value > median else COLORS["red"]
+    return f'<span style="color:{color}">{value:.1f}%</span>'
+
+
+def build_table_html(rows: pd.DataFrame, pop_stats: dict) -> str:
+    headers = [
+        "Zip Code", "Metro", "Score", "Grade", "Median Price",
+        "YoY Appr %", "Gross Yield %", "Market Segment", "Days on Market",
+    ]
+    th_cells = "".join(f"<th>{h}</th>" for h in headers)
+    row_htmls = []
+    for _, r in rows.iterrows():
+        row_htmls.append(
+            f"<tr>"
+            f"<td>{r['zip_code']}</td>"
+            f"<td>{r['metro']}</td>"
+            f"<td>{r['investment_score']:.1f}</td>"
+            f"<td>{grade_badge(r['investment_grade'])}</td>"
+            f"<td>${r['median_sale_price']:,.0f}</td>"
+            f"<td>{colored_pct(r['yoy_appreciation'],  pop_stats['median_yoy_appreciation'])}</td>"
+            f"<td>{colored_pct(r['gross_rental_yield'], pop_stats['median_gross_rental_yield'])}</td>"
+            f"<td>{r['market_segment']}</td>"
+            f"<td>{int(r['days_on_market'])}</td>"
+            f"</tr>"
+        )
+    return f"<table><tr>{th_cells}</tr>{''.join(row_htmls)}</table>"
+
+
+# ── Sidebar filters ───────────────────────────────────────────────────────────
+st.sidebar.header("Filters")
+
+all_metros  = sorted(latest["metro"].unique())
+metros      = st.sidebar.multiselect("Metro", options=all_metros, default=all_metros)
+eff_metros  = metros if metros else all_metros
+
+grades      = st.sidebar.multiselect("Grade", options=["A", "B", "C", "D", "F"], default=["A", "B", "C", "D", "F"])
+eff_grades  = grades if grades else ["A", "B", "C", "D", "F"]
+
+price_min   = int(latest["median_sale_price"].min())
+price_max   = int(latest["median_sale_price"].max())
+price_range = st.sidebar.slider(
+    "Price Range", price_min, price_max, (price_min, price_max),
+    step=10_000, format="$%d",
+)
+
+# ── Apply filters ─────────────────────────────────────────────────────────────
+filtered = latest[
+    latest["metro"].isin(eff_metros) &
+    latest["investment_grade"].isin(eff_grades) &
+    latest["median_sale_price"].between(*price_range)
+]
+
+# ── Zero-result guard ─────────────────────────────────────────────────────────
+if filtered.empty:
+    st.warning("No zip codes match your filters. Try widening the price range or selecting more grades.")
+    st.stop()
+
+st.caption(f"Showing {len(filtered)} of {len(latest)} zip codes — sorted by Investment Score")
+
+# ── Results table ─────────────────────────────────────────────────────────────
+try:
+    sorted_filtered = filtered.sort_values("investment_score", ascending=False)
+    st.markdown(build_table_html(sorted_filtered, pop_stats), unsafe_allow_html=True)
+except Exception as e:
+    st.error(f"Table rendering failed: {e}")
+
+st.divider()
+
+# ── CSV download ──────────────────────────────────────────────────────────────
+csv_data = filtered.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label=f"Download {len(filtered)} Zip Codes as CSV",
+    data=csv_data,
+    file_name="realestate_filtered.csv",
+    mime="text/csv",
+)
