@@ -302,7 +302,6 @@ SEGMENT_LABELS: dict[str, str] = {
 # Deliberate market patterns injected after base generation to create visually
 # compelling demo data. All thresholds live here so _inject_market_patterns()
 # contains no literals.
-# Note: PRD references 'Houston TX' which is not in METROS — Dallas TX substituted.
 TOP_APPRECIATING_COUNT: int   = 15
 DECLINING_COUNT:        int   = 12
 DECLINING_METROS:       list  = ["Dallas TX", "Phoenix AZ"]
