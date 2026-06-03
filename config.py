@@ -289,6 +289,8 @@ GRADE_THRESHOLDS: list[dict[str, str | int]] = [
     {"letter": "F", "min_score":  0, "label": "Avoid"},
 ]
 
+GRADE_LABEL_MAP: dict[str, str] = {g["letter"]: g["label"] for g in GRADE_THRESHOLDS}
+
 # ── Segment Labels ────────────────────────────────────────────────────────────
 SEGMENT_LABELS: dict[str, str] = {
     "Growth Market":   "High appreciation and fast sales — ideal for capital gains investors.",

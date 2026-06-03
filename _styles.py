@@ -1,6 +1,7 @@
+import pandas as pd
 import streamlit as st
 
-from config import COLORS
+from config import COLORS, GRADE_COLORS, GRADE_LABEL_MAP
 
 
 def inject_css() -> None:
@@ -72,3 +73,25 @@ def inject_css() -> None:
     }}
     </style>
     """, unsafe_allow_html=True)
+
+
+def grade_badge(grade: str) -> str:
+    color = GRADE_COLORS.get(grade, COLORS["navy"])
+    label = GRADE_LABEL_MAP.get(grade, grade)
+    return (
+        f'<span style="background:{color};color:white;padding:2px 10px;'
+        f'border-radius:12px;font-size:12px;font-weight:bold">{grade} — {label}</span>'
+    )
+
+
+def load_page_data() -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+    if "df" not in st.session_state or st.session_state["df"] is None:
+        st.warning("No data loaded — please navigate to the home page first.")
+        st.stop()
+    df: pd.DataFrame = st.session_state["df"]
+    pop_stats: dict  = st.session_state["pop_stats"]
+    if df.empty:
+        st.warning("No data available — check your data source.")
+        st.stop()
+    latest = df[df["month"] == df["month"].max()]
+    return df, pop_stats, latest
