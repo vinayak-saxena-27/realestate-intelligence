@@ -10,8 +10,8 @@ A data-driven Streamlit web application that empowers real estate investors with
 | Week 1 | Project structure, config, synthetic data | Complete |
 | Week 2 | Feature engineering pipeline | Complete |
 | Week 3 | ML models (Random Forest, K-Means, scoring) | Complete |
-| Week 4 | Plotly charts | Not started |
-| Week 5 | Streamlit UI, narratives | Not started |
+| Week 4 | Plotly charts + 3-page Streamlit dashboard | Complete |
+| Week 5 | Narrative analysis | In progress |
 
 ## Tech Stack
 
@@ -34,9 +34,13 @@ realestate-intelligence/
 ├── feature_engineering.py  # Seven feature functions + engineer_features() pipeline
 ├── models.py                # Random Forest price forecasting + K-Means segmentation
 ├── scoring.py               # Investment score composite + letter grade assignment
-├── charts.py                # Plotly chart factory functions (Week 4)
+├── charts.py                # Plotly chart factory functions
 ├── narrative.py             # Rule-based narrative text generator (Week 5)
-├── pages/                   # Streamlit page modules (Week 5)
+├── _styles.py               # Shared CSS injection, grade_badge(), load_page_data()
+├── pages/
+│   ├── 01_Command_Center.py    # Dashboard: KPI cards, grade donut, top 10, opportunity cards
+│   ├── 02_Zip_Code_Explorer.py # Filterable zip table with CSV download
+│   └── 03_Zip_Code_Deep_Dive.py # Per-zip price history, score breakdown, forecast
 └── data/                    # Data files — not committed (except .gitkeep)
 ```
 
@@ -46,6 +50,17 @@ realestate-intelligence/
 pip install streamlit pandas numpy scikit-learn scipy plotly openpyxl
 streamlit run app.py
 ```
+
+## App Pages
+
+### Command Center (`01_Command_Center.py`)
+Top-level dashboard. Shows 5 KPI cards (total zips, average score, top appreciation metro, best yield metro, A+B count), a grade distribution donut chart, a top-10 zip table, and 3 best-opportunity cards linking through to the Deep Dive page.
+
+### Zip Code Explorer (`02_Zip_Code_Explorer.py`)
+Filterable table of all 200 zip codes at the latest month snapshot. Sidebar filters for metro, grade, and price range. Color-coded appreciation and yield vs. population medians. CSV download of filtered results.
+
+### Zip Code Deep Dive (`03_Zip_Code_Deep_Dive.py`)
+Single-zip analysis. Dropdown pre-populated from `?zip=` query param (linked from opportunity cards). Shows 6 metric cards with vs-median deltas, a 24-month price history + 6-month forecast chart, and a score component breakdown bar chart.
 
 ## Data
 
@@ -187,7 +202,7 @@ Each component is independently min-max scaled to 0–100 before weighting. The 
 | D | Caution | 35 |
 | F | Avoid | 0 |
 
-`assign_grade(score)` iterates `GRADE_THRESHOLDS` from config — no hardcoded cutoffs in the function.
+`assign_grade(score)` iterates `GRADE_THRESHOLDS` from config — no hardcoded cutoffs in the function. `GRADE_LABEL_MAP` in `config.py` provides a pre-built `{letter: label}` dict used by UI helpers.
 
 ## Leakage Audit
 
@@ -273,6 +288,7 @@ Applied after base synthetic generation to create realistic market variation for
 | Constant | Description |
 |---|---|
 | `GRADE_THRESHOLDS` | `list[dict]` ordered A → F (Strong Buy → Avoid); `scoring.py` iterates and returns first match |
+| `GRADE_LABEL_MAP` | Pre-built `{letter: label}` dict derived from `GRADE_THRESHOLDS`; used by `grade_badge()` in `_styles.py` |
 | `GRADE_COLORS` | Hex badge color per letter grade |
 | `SEGMENT_LABELS` | 5 cluster names → one-sentence descriptions; count asserted equal to `KMEANS_K` |
 | `COLORS` | Brand palette (navy, gold, green, red, light_blue, gray) |
@@ -292,13 +308,3 @@ Applied after base synthetic generation to create realistic market variation for
 | `engineer_features(df, pop_stats)` | `@st.cache_data` — engineered DataFrame + completed `pop_stats` computed once from cached raw |
 | `train_price_model(df)` | Not cached — runs on every app start; fast enough (~10s) for a demo |
 | `train_segment_model(df)` | Not cached — same rationale |
-
-## Planned Output
-
-A 5-page Streamlit dashboard:
-
-1. **Market Overview** — metro-level price trends and heat map
-2. **Investment Scoring** — per-zip composite score with letter grade
-3. **Market Segments** — K-Means cluster explorer
-4. **Neighborhood Analysis** — income, education, home value breakdown
-5. **Data Explorer** — filterable raw + engineered data table
