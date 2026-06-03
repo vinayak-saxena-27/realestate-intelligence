@@ -1,35 +1,16 @@
 import pandas as pd
 import streamlit as st
 
-from _styles import inject_css
-from config import APP_ICON, COLORS, GRADE_COLORS, GRADE_THRESHOLDS, PAGE_TITLES
+from _styles import grade_badge, inject_css, load_page_data
+from config import APP_ICON, COLORS, PAGE_TITLES
 
 st.set_page_config(page_title=PAGE_TITLES["explorer"], page_icon=APP_ICON, layout="wide")
 inject_css()
 st.title(PAGE_TITLES["explorer"])
 
-# ── Session state guard ───────────────────────────────────────────────────────
-if "df" not in st.session_state or st.session_state["df"] is None:
-    st.warning("No data loaded — please navigate to the home page first.")
-    st.stop()
-
-df        = st.session_state["df"]
-pop_stats = st.session_state["pop_stats"]
-
-if df.empty:
-    st.warning("No data available — check your data source.")
-    st.stop()
-
-latest = df[df["month"] == df["month"].max()]
+df, pop_stats, latest = load_page_data()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def grade_badge(grade: str) -> str:
-    color = GRADE_COLORS.get(grade, COLORS["navy"])
-    label = {g["letter"]: g["label"] for g in GRADE_THRESHOLDS}.get(grade, grade)
-    return (
-        f'<span style="background:{color};color:white;padding:2px 10px;'
-        f'border-radius:12px;font-size:12px;font-weight:bold">{grade} — {label}</span>'
-    )
 
 
 def colored_pct(value: float, median: float) -> str:
