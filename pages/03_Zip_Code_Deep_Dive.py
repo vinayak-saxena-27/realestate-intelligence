@@ -97,8 +97,45 @@ try:
 except Exception as e:
     st.error(f"Chart rendering failed: {e}")
 
-# ── Week 5 placeholder ────────────────────────────────────────────────────────
+# ── Narrative + Investment Panel ──────────────────────────────────────────────
+from narrative import generate_investment_narrative, get_key_pros_cons
+from _styles import grade_badge
+from config import GRADE_COLORS
+
+VERDICTS = {
+    'A': 'Strong Buy — high conviction opportunity.',
+    'B': 'Buy — solid fundamentals with minor caveats.',
+    'C': 'Hold — monitor before committing capital.',
+    'D': 'Caution — significant risk factors present.',
+    'F': 'Avoid — does not meet investment criteria.',
+}
+
 st.divider()
-st.subheader("Investment Analysis")
-st.info("Narrative analysis coming in Week 5.")
-# Week 5: replace with generate_investment_narrative(row, pop_stats)
+col_narr, col_invest = st.columns([3, 2])
+
+narrative = generate_investment_narrative(row, pop_stats)
+narrative_html = f"""<div style='border-left:4px solid #1B3A5C;background:#EAF2FB;
+padding:16px 20px;border-radius:4px;'>
+<h4 style='color:#1B3A5C;margin:0 0 8px 0'>Investment Analysis</h4>
+<p style='color:#444;line-height:1.7;margin:0'>{narrative}</p>
+</div>"""
+col_narr.markdown(narrative_html, unsafe_allow_html=True)
+
+pros, cons = get_key_pros_cons(row, pop_stats)
+verdict    = VERDICTS[row['investment_grade']]
+grade      = row['investment_grade']
+
+with col_invest:
+    st.markdown(f"<p style='font-weight:bold;color:#1B3A5C;font-size:14px;margin-bottom:6px'>"
+                f"Should I Invest Here?</p>", unsafe_allow_html=True)
+    st.markdown(grade_badge(grade), unsafe_allow_html=True)
+    st.markdown(f"<p style='font-weight:bold;color:{GRADE_COLORS[grade]};margin:8px 0'>"
+                f"{verdict}</p>", unsafe_allow_html=True)
+    st.markdown("**Strengths**")
+    for pro in pros:
+        st.markdown(f'<span style="color:#1A7A4A">&#10003;</span> {pro}',
+                    unsafe_allow_html=True)
+    st.markdown("**Watch Points**")
+    for con in cons:
+        st.markdown(f'<span style="color:#C0392B">&#10007;</span> {con}',
+                    unsafe_allow_html=True)

@@ -23,6 +23,8 @@ st.session_state["price_importances"] = dict(zip(RF_FEATURES, price_model.featur
 
 df = compute_investment_score(df, pop_stats)
 pop_stats["median_investment_score"] = float(df["investment_score"].median())
+pop_stats["median_sale_price"]       = float(df["median_sale_price"].median())
+pop_stats["median_net_yield"]        = float(df["net_rental_yield"].median())
 
 kmeans_model, kmeans_scaler          = train_segment_model(df)
 df["market_segment"]                 = label_segments(df, kmeans_model, kmeans_scaler)
