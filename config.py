@@ -332,6 +332,20 @@ MAX_CSV_SIZE_MB: int = 50   # reject files larger than this before reading into 
 # ── App Settings ──────────────────────────────────────────────────────────────
 APP_TITLE: str  = "Real Estate Investment Intelligence"
 APP_ICON:  str  = "🏠"
+
+APP_METHODOLOGY_TEXT: str = (
+    "This platform analyses {n_zips} zip codes across {n_metros} US metro areas using "
+    "publicly available real estate market data. The Investment Score combines six market "
+    "signals — price appreciation, rental yield, market heat, neighbourhood quality, "
+    "price velocity, and net yield — into a single 0-to-100 rating, weighted to reflect "
+    "the priorities of a long-term residential investor. The price forecast uses a "
+    "machine learning model trained on historical price patterns to estimate where each "
+    "zip code's median sale price may be in six months. Market segments are identified "
+    "automatically by grouping zip codes with similar characteristics — no manual "
+    "classification is applied. All analysis is based on the data loaded at app startup "
+    "and is intended as a research aid, not financial advice."
+)
+
 PAGE_TITLES: dict[str, str] = {
     "overview":       "Market Overview",
     "scoring":        "Investment Scoring",
