@@ -8,38 +8,55 @@ def inject_css() -> None:
     """Inject shared CSS into the current Streamlit page."""
     st.markdown(f"""
     <style>
+    /* ── Global ────────────────────────────────────────── */
+    .stDeployButton {{ display: none !important; }}
+    .block-container {{ padding-top: 1.5rem; }}
+    [data-testid='stMetricDelta'] {{ font-size: 12px; }}
+
     /* ── KPI Cards ─────────────────────────────────────── */
     .kpi-card {{
-        background: {COLORS['navy']};
-        border-radius: 10px;
-        padding: 20px 16px;
+        background: white;
+        border: 1px solid #E0E7EF;
+        border-top: 4px solid {COLORS['gold']};
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: 0 2px 8px rgba(27,58,92,0.08);
         text-align: center;
-        margin: 4px 0;
     }}
     .kpi-label {{
-        font-size: 11px;
-        color: rgba(255,255,255,0.75);
+        font-size: 12px;
+        color: #888;
         text-transform: uppercase;
-        letter-spacing: 0.8px;
-        margin-bottom: 8px;
+        letter-spacing: 0.5px;
     }}
     .kpi-value {{
-        font-size: 22px;
-        font-weight: bold;
-        color: {COLORS['gold']};
+        font-size: 26px;
+        font-weight: 700;
+        color: {COLORS['navy']};
+        margin: 4px 0;
     }}
     .kpi-delta {{
-        font-size: 11px;
-        color: rgba(255,255,255,0.6);
-        margin-top: 4px;
+        font-size: 12px;
+        color: {COLORS['green']};
+    }}
+
+    /* ── Grade Badge Pills ─────────────────────────────── */
+    .grade-badge {{
+        display: inline-block;
+        padding: 3px 12px;
+        border-radius: 14px;
+        font-size: 12px;
+        font-weight: 700;
+        color: white;
     }}
 
     /* ── Opportunity Cards ─────────────────────────────── */
     .opp-card {{
-        background: {COLORS['light_blue']};
-        border-left: 4px solid {COLORS['navy']};
+        background: white;
+        border: 1px solid #E0E7EF;
         border-radius: 8px;
-        padding: 18px 16px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(27,58,92,0.08);
         height: 100%;
         box-sizing: border-box;
     }}
