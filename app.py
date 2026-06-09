@@ -2,7 +2,7 @@ import plotly.express as px
 import streamlit as st
 
 from _styles import inject_css, load_page_data
-from config import APP_ICON, APP_TITLE, COLORS, GRADE_COLORS, RF_FEATURES
+from config import APP_ICON, APP_TITLE, GRADE_COLORS, RF_FEATURES
 
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout="wide")
 inject_css()

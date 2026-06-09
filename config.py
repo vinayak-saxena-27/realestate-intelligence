@@ -362,11 +362,6 @@ APP_METHODOLOGY_TEXT: str = (
 )
 
 PAGE_TITLES: dict[str, str] = {
-    "overview":       "Market Overview",
-    "scoring":        "Investment Scoring",
-    "segments":       "Market Segments",
-    "neighborhood":   "Neighborhood Analysis",
-    "data":           "Data Explorer",
     "command_center": "Command Center",
     "explorer":       "Zip Code Explorer",
     "deep_dive":      "Zip Code Deep Dive",
@@ -416,6 +411,8 @@ if METRO_ZIP_BASE.keys() != METROS.keys():
     raise ValueError("METRO_ZIP_BASE keys must match METROS keys")
 if LOGNORMAL_BASE_PRICE.keys() != METROS.keys():
     raise ValueError("LOGNORMAL_BASE_PRICE keys must match METROS keys")
+if METRO_COORDS.keys() != METROS.keys():
+    raise ValueError("METRO_COORDS keys must match METROS keys")
 if len(CHART_COLORS) != 6:
     raise ValueError("CHART_COLORS must contain exactly 6 hex strings")
 if len(SEGMENT_LABELS) != KMEANS_K:
