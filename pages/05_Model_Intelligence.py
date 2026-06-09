@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from _styles import inject_css, load_page_data
+from charts import style_figure
 from config import (
     APP_ICON,
     APP_METHODOLOGY_TEXT,
@@ -73,10 +74,8 @@ else:
         marker_color=COLORS["navy"],
         hovertemplate="%{y}: %{x:.3f}<extra></extra>",
     ))
-    fig.update_layout(
-        xaxis_title="Importance Score",
-        margin=dict(l=160, t=40, b=20, r=20),
-    )
+    style_figure(fig, margin=dict(l=160, t=40, b=20, r=20))
+    fig.update_xaxes(title_text="Importance Score")
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -98,7 +97,7 @@ try:
         hole=0.3,
         hovertemplate="%{label}: %{percent}<extra></extra>",
     ))
-    fig_pie.update_layout(title="Investment Score Weight Distribution")
+    style_figure(fig_pie, title=dict(text="Investment Score Weight Distribution", font=dict(size=14)))
     st.plotly_chart(fig_pie, use_container_width=True)
 except Exception as e:
     st.error(f"Score weight chart failed to render: {e}")

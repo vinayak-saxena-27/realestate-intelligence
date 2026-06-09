@@ -8,6 +8,11 @@ from config import APP_ICON, COLORS, PAGE_TITLES
 st.set_page_config(page_title=PAGE_TITLES["command_center"], page_icon=APP_ICON, layout="wide")
 inject_css()
 st.title("Command Center")
+st.markdown(
+    "<p style='color:#8A9BB0;font-size:13.5px;margin-top:-8px;margin-bottom:1rem'>"
+    "Real-time investment scores across 200 zip codes and 10 US metro areas</p>",
+    unsafe_allow_html=True,
+)
 
 
 def kpi_card(label: str, value: str, delta: str = "") -> str:
@@ -27,23 +32,29 @@ def opportunity_card(row: pd.Series, pop_stats: dict) -> str:
     segment     = row.get("market_segment", "N/A")
     return f"""
     <div class="opp-card">
-        <div style="font-size:16px;font-weight:bold;color:{COLORS['navy']};margin-bottom:8px">
-            {row['zip_code']} — {row['metro']}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+                <div style="font-size:19px;font-weight:800;color:{COLORS['navy']};letter-spacing:-0.3px">{row['zip_code']}</div>
+                <div style="font-size:12px;color:#8A9BB0;font-weight:500;margin-top:2px">{row['metro']}</div>
+            </div>
+            <div style="margin-top:2px">{grade_badge(grade)}</div>
         </div>
-        <div style="margin-bottom:8px">
-            {grade_badge(grade)}
+        <div style="background:#F4F7FA;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:baseline;gap:5px">
+            <span style="font-size:28px;font-weight:800;color:{COLORS['gold']};letter-spacing:-0.5px">{row['investment_score']:.1f}</span>
+            <span style="font-size:11px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.5px">/ 100</span>
         </div>
-        <div style="color:{COLORS['gold']};font-weight:bold;margin-bottom:6px">
-            Score: {row['investment_score']:.1f}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:14px">
+            <div>
+                <div style="font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">YoY Appr.</div>
+                <div style="font-size:16px;font-weight:700;color:{appr_color}">{row['yoy_appreciation']:.1f}%</div>
+            </div>
+            <div>
+                <div style="font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Gross Yield</div>
+                <div style="font-size:16px;font-weight:700;color:{yield_color}">{row['gross_rental_yield']:.1f}%</div>
+            </div>
         </div>
-        <div style="color:{appr_color};margin-bottom:4px">
-            YoY Appreciation: {row['yoy_appreciation']:.1f}%
-        </div>
-        <div style="color:{yield_color};margin-bottom:4px">
-            Gross Yield: {row['gross_rental_yield']:.1f}%
-        </div>
-        <div style="margin-bottom:12px">Market Segment: {segment}</div>
-        <a href="/Zip_Code_Deep_Dive?zip={row['zip_code']}">View Deep Dive →</a>
+        <div style="font-size:11.5px;color:#8A9BB0;margin-bottom:16px">{segment}</div>
+        <a href="/Zip_Code_Deep_Dive?zip={row['zip_code']}">View Full Analysis →</a>
     </div>"""
 
 
