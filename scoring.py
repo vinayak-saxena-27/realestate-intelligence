@@ -1,7 +1,7 @@
 import pandas as pd
 
 from config import GRADE_THRESHOLDS, INVESTMENT_SCORE_WEIGHTS as W
-from feature_engineering import minmax, assert_pop_stats_finalized
+from feature_engineering import assert_pop_stats_finalized
 
 _COMPONENT_COLS = [
     "score_appreciation",
@@ -25,20 +25,38 @@ def compute_investment_score(df: pd.DataFrame, pop_stats: dict) -> pd.DataFrame:
     """Add investment score, grade, and 6 weighted component columns to df.
 
     Returns a copy of df — input is never mutated.
-    All six components are min-max scaled to 0–100 before weighting.
+    Scoring is done on the latest-month snapshot (200 zips) using percentile rank
+    so each zip is compared to contemporaries, not to the full time-series.
+    Percentile rank is outlier-immune: extreme appreciation outliers can't distort
+    the whole distribution the way min-max normalisation would.
+    Scores are then broadcast back to all months by zip_code so charts work correctly.
     pop_stats must be finalized by engineer_features() before calling this function.
     """
     assert_pop_stats_finalized(pop_stats)
     df = df.copy()
-    df["score_appreciation"] = minmax(df["yoy_appreciation"])  * W["appreciation"]
-    df["score_yield"]        = minmax(df["gross_rental_yield"]) * W["yield"]
-    df["score_heat"]         = minmax(df["market_heat_index"])  * W["heat"]
-    df["score_neighborhood"] = minmax(df["neighborhood_score"]) * W["neighborhood"]
-    df["score_velocity"]     = minmax(df["price_velocity"])     * W["velocity"]
-    df["score_net_yield"]    = minmax(df["net_rental_yield"])   * W["net_yield"]
-    raw_sum = df[_COMPONENT_COLS].sum(axis=1)
-    df["investment_score"] = raw_sum.clip(0, 100)
-    df["investment_grade"]   = df["investment_score"].apply(assign_grade)
+
+    latest = df[df["month"] == df["month"].max()].copy()
+
+    def _rank(s: pd.Series) -> pd.Series:
+        return s.rank(pct=True, method="average") * 100
+
+    latest["score_appreciation"] = _rank(latest["yoy_appreciation"])  * W["appreciation"]
+    latest["score_yield"]        = _rank(latest["gross_rental_yield"]) * W["yield"]
+    latest["score_heat"]         = _rank(latest["market_heat_index"])  * W["heat"]
+    latest["score_neighborhood"] = _rank(latest["neighborhood_score"]) * W["neighborhood"]
+    latest["score_velocity"]     = _rank(latest["price_velocity"])     * W["velocity"]
+    latest["score_net_yield"]    = _rank(latest["net_rental_yield"])   * W["net_yield"]
+
+    raw_sum = latest[_COMPONENT_COLS].sum(axis=1)
+    latest["investment_score"] = raw_sum.clip(0, 100)
+    latest["investment_grade"] = latest["investment_score"].apply(assign_grade)
+
+    # Broadcast zip-level scores to all months — a zip's score reflects its
+    # standing among contemporaries at the latest snapshot, not cross-time rank.
+    zip_scores = latest.set_index("zip_code")[_COMPONENT_COLS + ["investment_score", "investment_grade"]]
+    for col in zip_scores.columns:
+        df[col] = df["zip_code"].map(zip_scores[col])
+
     return df
 
 
