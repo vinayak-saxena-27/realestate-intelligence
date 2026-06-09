@@ -115,11 +115,15 @@ col_narr, col_invest = st.columns([3, 2])
 
 try:
     narrative = generate_investment_narrative(row, pop_stats)
-    narrative_html = f"""<div style='border-left:4px solid #1B3A5C;background:#EAF2FB;
-padding:16px 20px;border-radius:4px;'>
-<h4 style='color:#1B3A5C;margin:0 0 8px 0'>Investment Analysis</h4>
-<p style='color:#444;line-height:1.7;margin:0'>{narrative}</p>
-</div>"""
+    narrative_html = f"""
+    <div style='background:white;border:1px solid #DDE4EE;border-left:4px solid {GRADE_COLORS[row["investment_grade"]]};
+    border-radius:0 12px 12px 0;padding:20px 24px;
+    box-shadow:0 1px 3px rgba(27,58,92,0.06),0 4px 12px rgba(27,58,92,0.03);'>
+        <div style='font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px'>
+            Investment Analysis
+        </div>
+        <p style='color:#2D3748;line-height:1.8;margin:0;font-size:14px'>{narrative}</p>
+    </div>"""
     col_narr.markdown(narrative_html, unsafe_allow_html=True)
 except Exception as e:
     col_narr.warning(f"Investment narrative unavailable: {e}")
@@ -129,19 +133,33 @@ try:
     verdict    = VERDICTS[row['investment_grade']]
     grade      = row['investment_grade']
 
-    with col_invest:
-        st.markdown(f"<p style='font-weight:bold;color:#1B3A5C;font-size:14px;margin-bottom:6px'>"
-                    f"Should I Invest Here?</p>", unsafe_allow_html=True)
-        st.markdown(grade_badge(grade), unsafe_allow_html=True)
-        st.markdown(f"<p style='font-weight:bold;color:{GRADE_COLORS[grade]};margin:8px 0'>"
-                    f"{verdict}</p>", unsafe_allow_html=True)
-        st.markdown("**Strengths**")
-        for pro in pros:
-            st.markdown(f'<span style="color:#1A7A4A">&#10003;</span> {pro}',
-                        unsafe_allow_html=True)
-        st.markdown("**Watch Points**")
-        for con in cons:
-            st.markdown(f'<span style="color:#C0392B">&#10007;</span> {con}',
-                        unsafe_allow_html=True)
+    pros_html = "".join(
+        f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:7px'>"
+        f"<span style='color:#1A7A4A;font-size:13px;line-height:1.5;flex-shrink:0'>✓</span>"
+        f"<span style='color:#2D3748;font-size:13px;line-height:1.5'>{p}</span></div>"
+        for p in pros
+    )
+    cons_html = "".join(
+        f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:7px'>"
+        f"<span style='color:#C0392B;font-size:13px;line-height:1.5;flex-shrink:0'>✗</span>"
+        f"<span style='color:#2D3748;font-size:13px;line-height:1.5'>{c}</span></div>"
+        for c in cons
+    )
+    invest_html = f"""
+    <div style='background:white;border:1px solid #DDE4EE;border-radius:12px;
+    padding:22px 24px;box-shadow:0 1px 3px rgba(27,58,92,0.06),0 4px 12px rgba(27,58,92,0.03);'>
+        <div style='font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;
+        letter-spacing:0.8px;margin-bottom:12px'>Should I Invest Here?</div>
+        <div style='margin-bottom:10px'>{grade_badge(grade)}</div>
+        <div style='font-size:15px;font-weight:700;color:{GRADE_COLORS[grade]};
+        margin-bottom:18px;line-height:1.3'>{verdict}</div>
+        <div style='font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;
+        letter-spacing:0.5px;margin-bottom:8px'>Strengths</div>
+        {pros_html}
+        <div style='font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;
+        letter-spacing:0.5px;margin:14px 0 8px'>Watch Points</div>
+        {cons_html}
+    </div>"""
+    col_invest.markdown(invest_html, unsafe_allow_html=True)
 except Exception as e:
     col_invest.warning(f"Investment panel unavailable: {e}")

@@ -2,6 +2,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
+from charts import style_figure
 from config import APP_ICON, CHART_COLORS, PAGE_TITLES
 from data_loader import get_price_history_df
 
@@ -114,12 +115,13 @@ def create_comparison_chart(selected_zips) -> go.Figure:
             name=f"{zip_code} ({metro})",
             line=dict(color=CHART_COLORS[i % len(CHART_COLORS)], width=2),
         ))
-    fig.update_layout(
-        title="24-Month Price History Comparison",
-        yaxis=dict(tickprefix="$", tickformat=","),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    style_figure(
+        fig,
+        title=dict(text="24-Month Price History Comparison", font=dict(size=14)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)"),
         margin=dict(t=60),
     )
+    fig.update_yaxes(tickprefix="$", tickformat=",")
     return fig
 
 
