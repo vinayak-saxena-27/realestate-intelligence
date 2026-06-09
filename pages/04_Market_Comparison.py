@@ -93,8 +93,11 @@ def build_comparison_table(rows_df) -> str:
     return f"<table>{header_row}{rows_html}</table>"
 
 
-st.subheader("Side-by-Side Metrics")
-st.markdown(build_comparison_table(comp_latest), unsafe_allow_html=True)
+try:
+    st.subheader("Side-by-Side Metrics")
+    st.markdown(build_comparison_table(comp_latest), unsafe_allow_html=True)
+except Exception as e:
+    st.error(f"Comparison table failed to render: {e}")
 
 st.divider()
 
@@ -120,5 +123,8 @@ def create_comparison_chart(selected_zips) -> go.Figure:
     return fig
 
 
-st.subheader("Price History")
-st.plotly_chart(create_comparison_chart(selected), use_container_width=True)
+try:
+    st.subheader("Price History")
+    st.plotly_chart(create_comparison_chart(selected), use_container_width=True)
+except Exception as e:
+    st.error(f"Price history chart failed to render: {e}")
