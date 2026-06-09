@@ -27,6 +27,7 @@
 # |   |   StandardScaler fitted on full df. No target to leak in clustering.   |
 # ─────────────────────────────────────────────────────────────────────────────
 
+import logging
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
@@ -123,7 +124,7 @@ def train_price_model(df: pd.DataFrame) -> tuple[RandomForestRegressor, dict]:
     rmse  = float(np.sqrt(mean_squared_error(y_test, preds)))
     r2    = float(r2_score(y_test, preds))
     metrics = {"rmse": rmse, "r2": r2, "train_rows": len(X_train), "test_rows": len(X_test)}
-    print(f"Price Model — RMSE: ${rmse:,.0f} | R²: {r2:.3f}")
+    logging.info("Price Model — RMSE: $%s | R²: %.3f", f"{rmse:,.0f}", r2)
     return model, metrics
 
 
@@ -143,7 +144,7 @@ def train_segment_model(df: pd.DataFrame) -> tuple[KMeans, StandardScaler]:
         max_iter=KMEANS_MAX_ITER,
     )
     kmeans.fit(X_scaled)
-    print(f"K-Means inertia: {kmeans.inertia_:.1f} | Iterations: {kmeans.n_iter_}")
+    logging.info("K-Means inertia: %.1f | Iterations: %d", kmeans.inertia_, kmeans.n_iter_)
     return kmeans, scaler
 
 

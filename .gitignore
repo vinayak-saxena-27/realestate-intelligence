@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
+*.so
 .Python
 
 # Virtual environments
@@ -34,7 +36,10 @@ data/*.json
 .vscode/
 .idea/
 *.DS_Store
+.DS_Store
 Thumbs.db
+*.swp
+*.swo
 
 # Secrets / env
 .env

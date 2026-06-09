@@ -76,13 +76,16 @@ metrics = [
     ),
 ]
 
-metric_cols = st.columns(3)
-for i, (label, value, delta, delta_color) in enumerate(metrics):
-    kwargs = dict(label=label, value=value, delta=delta)
-    if delta_color:
-        kwargs["delta_color"] = delta_color
-    with metric_cols[i % 3]:
-        st.metric(**kwargs)
+try:
+    metric_cols = st.columns(3)
+    for i, (label, value, delta, delta_color) in enumerate(metrics):
+        kwargs = dict(label=label, value=value, delta=delta)
+        if delta_color:
+            kwargs["delta_color"] = delta_color
+        with metric_cols[i % 3]:
+            st.metric(**kwargs)
+except Exception as e:
+    st.warning(f"Metric cards could not be rendered — some data may be missing: {e}")
 
 st.divider()
 
@@ -110,29 +113,35 @@ VERDICTS = {
 st.divider()
 col_narr, col_invest = st.columns([3, 2])
 
-narrative = generate_investment_narrative(row, pop_stats)
-narrative_html = f"""<div style='border-left:4px solid #1B3A5C;background:#EAF2FB;
+try:
+    narrative = generate_investment_narrative(row, pop_stats)
+    narrative_html = f"""<div style='border-left:4px solid #1B3A5C;background:#EAF2FB;
 padding:16px 20px;border-radius:4px;'>
 <h4 style='color:#1B3A5C;margin:0 0 8px 0'>Investment Analysis</h4>
 <p style='color:#444;line-height:1.7;margin:0'>{narrative}</p>
 </div>"""
-col_narr.markdown(narrative_html, unsafe_allow_html=True)
+    col_narr.markdown(narrative_html, unsafe_allow_html=True)
+except Exception as e:
+    col_narr.warning(f"Investment narrative unavailable: {e}")
 
-pros, cons = get_key_pros_cons(row, pop_stats)
-verdict    = VERDICTS[row['investment_grade']]
-grade      = row['investment_grade']
+try:
+    pros, cons = get_key_pros_cons(row, pop_stats)
+    verdict    = VERDICTS[row['investment_grade']]
+    grade      = row['investment_grade']
 
-with col_invest:
-    st.markdown(f"<p style='font-weight:bold;color:#1B3A5C;font-size:14px;margin-bottom:6px'>"
-                f"Should I Invest Here?</p>", unsafe_allow_html=True)
-    st.markdown(grade_badge(grade), unsafe_allow_html=True)
-    st.markdown(f"<p style='font-weight:bold;color:{GRADE_COLORS[grade]};margin:8px 0'>"
-                f"{verdict}</p>", unsafe_allow_html=True)
-    st.markdown("**Strengths**")
-    for pro in pros:
-        st.markdown(f'<span style="color:#1A7A4A">&#10003;</span> {pro}',
-                    unsafe_allow_html=True)
-    st.markdown("**Watch Points**")
-    for con in cons:
-        st.markdown(f'<span style="color:#C0392B">&#10007;</span> {con}',
-                    unsafe_allow_html=True)
+    with col_invest:
+        st.markdown(f"<p style='font-weight:bold;color:#1B3A5C;font-size:14px;margin-bottom:6px'>"
+                    f"Should I Invest Here?</p>", unsafe_allow_html=True)
+        st.markdown(grade_badge(grade), unsafe_allow_html=True)
+        st.markdown(f"<p style='font-weight:bold;color:{GRADE_COLORS[grade]};margin:8px 0'>"
+                    f"{verdict}</p>", unsafe_allow_html=True)
+        st.markdown("**Strengths**")
+        for pro in pros:
+            st.markdown(f'<span style="color:#1A7A4A">&#10003;</span> {pro}',
+                        unsafe_allow_html=True)
+        st.markdown("**Watch Points**")
+        for con in cons:
+            st.markdown(f'<span style="color:#C0392B">&#10007;</span> {con}',
+                        unsafe_allow_html=True)
+except Exception as e:
+    col_invest.warning(f"Investment panel unavailable: {e}")

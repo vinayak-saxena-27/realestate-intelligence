@@ -84,21 +84,24 @@ st.divider()
 # ── 3. Investment Score Weight Pie ────────────────────────────────────────────
 st.subheader("Investment Score Weight Distribution")
 
-assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values()) - 1.0) < 1e-9, \
-    "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
+try:
+    assert abs(sum(INVESTMENT_SCORE_WEIGHTS.values()) - 1.0) < 1e-9, \
+        "INVESTMENT_SCORE_WEIGHTS must sum to 1.0"
 
-labels = [k.replace("_", " ").title() for k in INVESTMENT_SCORE_WEIGHTS.keys()]
-values = list(INVESTMENT_SCORE_WEIGHTS.values())
+    labels = [k.replace("_", " ").title() for k in INVESTMENT_SCORE_WEIGHTS.keys()]
+    values = list(INVESTMENT_SCORE_WEIGHTS.values())
 
-fig_pie = go.Figure(go.Pie(
-    labels=labels,
-    values=values,
-    marker_colors=CHART_COLORS,
-    hole=0.3,
-    hovertemplate="%{label}: %{percent}<extra></extra>",
-))
-fig_pie.update_layout(title="Investment Score Weight Distribution")
-st.plotly_chart(fig_pie, use_container_width=True)
+    fig_pie = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        marker_colors=CHART_COLORS,
+        hole=0.3,
+        hovertemplate="%{label}: %{percent}<extra></extra>",
+    ))
+    fig_pie.update_layout(title="Investment Score Weight Distribution")
+    st.plotly_chart(fig_pie, use_container_width=True)
+except Exception as e:
+    st.error(f"Score weight chart failed to render: {e}")
 
 st.divider()
 
