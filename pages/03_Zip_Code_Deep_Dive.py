@@ -2,7 +2,7 @@ import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
 from charts import create_price_history, create_score_components
-from config import APP_ICON, GRADE_COLORS, PAGE_TITLES, SEGMENT_LABELS
+from config import GRADE_COLORS, PAGE_TITLES, SEGMENT_LABELS
 from narrative import generate_investment_narrative, get_key_pros_cons
 
 inject_css()

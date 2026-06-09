@@ -5,7 +5,6 @@ import streamlit as st
 from _styles import inject_css, load_page_data
 from charts import style_figure
 from config import (
-    APP_ICON,
     APP_METHODOLOGY_TEXT,
     CHART_COLORS,
     COLORS,
@@ -17,7 +16,7 @@ inject_css()
 
 df, pop_stats, latest = load_page_data()
 
-st.header("Model Intelligence")
+st.title("Model Intelligence")
 st.caption("How the price forecast model and investment score work under the hood.")
 
 st.divider()

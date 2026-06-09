@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
-from config import APP_ICON, COLORS, PAGE_TITLES
+from config import COLORS, PAGE_TITLES
 
 inject_css()
 st.title(PAGE_TITLES["explorer"])

@@ -154,7 +154,7 @@ def inject_css() -> None:
         border-collapse: collapse;
         font-size: 13px;
     }}
-    thead th {{
+    th {{
         background: {COLORS['navy']};
         color: rgba(255,255,255,0.88);
         padding: 10px 14px;
@@ -165,13 +165,13 @@ def inject_css() -> None:
         text-transform: uppercase;
         border: none;
     }}
-    tbody td {{
+    td {{
         padding: 10px 14px;
         border-bottom: 1px solid #EEF2F7;
         color: #2D3748;
     }}
-    tbody tr:last-child td {{ border-bottom: none; }}
-    tbody tr:hover td {{ background: #F0F6FF; }}
+    tr:last-child td {{ border-bottom: none; }}
+    tr:hover td {{ background: #F0F6FF; }}
     </style>
     """, unsafe_allow_html=True)
 

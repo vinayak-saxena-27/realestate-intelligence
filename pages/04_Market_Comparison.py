@@ -3,14 +3,14 @@ import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
 from charts import style_figure
-from config import APP_ICON, CHART_COLORS, PAGE_TITLES
+from config import CHART_COLORS
 from data_loader import get_price_history_df
 
 inject_css()
 
 df, pop_stats, latest = load_page_data()
 
-st.header("Market Comparison")
+st.title("Market Comparison")
 
 # ── Zip selector ──────────────────────────────────────────────────────────────
 zip_info   = latest.set_index("zip_code")[["metro", "investment_score"]].to_dict("index")
