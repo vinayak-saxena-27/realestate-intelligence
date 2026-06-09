@@ -320,6 +320,8 @@ REQUIRED_POP_STAT_KEYS: frozenset[str] = frozenset({
     "median_neighborhood_score",
     "median_days_on_market",
     "median_investment_score",
+    "median_sale_price",
+    "median_net_yield",
     "top_metro_appreciation",
     "best_yield_metro",
     "is_finalized",

@@ -1,8 +1,9 @@
 import streamlit as st
 
-from _styles import inject_css, load_page_data
+from _styles import grade_badge, inject_css, load_page_data
 from charts import create_price_history, create_score_components
-from config import APP_ICON, PAGE_TITLES, SEGMENT_LABELS
+from config import APP_ICON, GRADE_COLORS, PAGE_TITLES, SEGMENT_LABELS
+from narrative import generate_investment_narrative, get_key_pros_cons
 
 st.set_page_config(page_title=PAGE_TITLES["deep_dive"], page_icon=APP_ICON, layout="wide")
 inject_css()
@@ -98,10 +99,6 @@ except Exception as e:
     st.error(f"Chart rendering failed: {e}")
 
 # ── Narrative + Investment Panel ──────────────────────────────────────────────
-from narrative import generate_investment_narrative, get_key_pros_cons
-from _styles import grade_badge
-from config import GRADE_COLORS
-
 VERDICTS = {
     'A': 'Strong Buy — high conviction opportunity.',
     'B': 'Buy — solid fundamentals with minor caveats.',

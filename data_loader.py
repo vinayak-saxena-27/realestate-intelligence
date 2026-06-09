@@ -397,7 +397,9 @@ def _compute_pop_stats(df: pd.DataFrame) -> dict:
         "median_market_heat_index":  50.0,   # placeholder — updated after engineer_features()
         "median_neighborhood_score": 50.0,   # placeholder — updated after engineer_features()
         "median_days_on_market":     float(df["days_on_market"].median()),
-        "median_investment_score":   0.0,    # placeholder — filled in Week 3
+        "median_investment_score":   0.0,    # placeholder — filled after compute_investment_score()
+        "median_sale_price":         float(df["median_sale_price"].median()),
+        "median_net_yield":          0.0,    # placeholder — updated after engineer_features()
         "top_metro_appreciation":    str(metro_appr.idxmax()),
         "best_yield_metro":          str(metro_yield.idxmax()),
         "is_finalized":              False,
