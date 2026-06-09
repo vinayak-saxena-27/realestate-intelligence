@@ -1,7 +1,7 @@
 import pandas as pd
 
 from config import GRADE_THRESHOLDS, INVESTMENT_SCORE_WEIGHTS as W
-from feature_engineering import _minmax, assert_pop_stats_finalized
+from feature_engineering import minmax, assert_pop_stats_finalized
 
 _COMPONENT_COLS = [
     "score_appreciation",
@@ -30,14 +30,14 @@ def compute_investment_score(df: pd.DataFrame, pop_stats: dict) -> pd.DataFrame:
     """
     assert_pop_stats_finalized(pop_stats)
     df = df.copy()
-    df["score_appreciation"] = _minmax(df["yoy_appreciation"])  * W["appreciation"]
-    df["score_yield"]        = _minmax(df["gross_rental_yield"]) * W["yield"]
-    df["score_heat"]         = _minmax(df["market_heat_index"])  * W["heat"]
-    df["score_neighborhood"] = _minmax(df["neighborhood_score"]) * W["neighborhood"]
-    df["score_velocity"]     = _minmax(df["price_velocity"])     * W["velocity"]
-    df["score_net_yield"]    = _minmax(df["net_rental_yield"])   * W["net_yield"]
+    df["score_appreciation"] = minmax(df["yoy_appreciation"])  * W["appreciation"]
+    df["score_yield"]        = minmax(df["gross_rental_yield"]) * W["yield"]
+    df["score_heat"]         = minmax(df["market_heat_index"])  * W["heat"]
+    df["score_neighborhood"] = minmax(df["neighborhood_score"]) * W["neighborhood"]
+    df["score_velocity"]     = minmax(df["price_velocity"])     * W["velocity"]
+    df["score_net_yield"]    = minmax(df["net_rental_yield"])   * W["net_yield"]
     raw_sum = df[_COMPONENT_COLS].sum(axis=1)
-    df["investment_score"] = _minmax(raw_sum).clip(0, 100)
+    df["investment_score"] = raw_sum.clip(0, 100)
     df["investment_grade"]   = df["investment_score"].apply(assign_grade)
     return df
 

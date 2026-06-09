@@ -75,13 +75,16 @@ def create_price_history(df: pd.DataFrame, zip_code: str) -> go.Figure:
         return fig
 
     history_df = get_price_history_df(df, zip_code)   # sorted oldest → newest
-    n          = len(history_df)
     pred_price = row.sort_values("month").iloc[-1]["predicted_price_6m"]
     last_price = history_df["median_sale_price"].iloc[-1]
+    last_month = history_df["month"].iloc[-1]
 
-    x_hist = [f"Month {i + 1}" for i in range(n)]
+    x_hist = history_df["month"].tolist()
     # Forecast trace anchors at last history point for visual continuity
-    x_fore = [f"Month {n}"] + [f"Forecast +{i}" for i in range(1, 7)]
+    future_months = [
+        (pd.Period(last_month, "M") + i).strftime("%Y-%m") for i in range(1, 7)
+    ]
+    x_fore = [last_month] + future_months
     y_fore = [last_price] + [pred_price] * 6
 
     fig = go.Figure()
@@ -122,7 +125,7 @@ def create_score_components(row: pd.Series, df: pd.DataFrame) -> go.Figure:
         hovertemplate="%{y}: %{x:.1f}<extra></extra>",
     ))
     fig.update_layout(
-        xaxis=dict(range=[0, 25], title="Weighted Score"),
+        xaxis=dict(range=[0, max(INVESTMENT_SCORE_WEIGHTS.values()) * 100], title="Weighted Score"),
         title=f"Overall Score: {row['investment_score']:.1f}",
         margin=dict(t=40, b=20, l=160, r=20),
     )

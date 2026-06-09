@@ -91,7 +91,7 @@ def compute_volume_trend(df: pd.DataFrame) -> pd.Series:
     return raw.fillna(0.0)
 
 
-def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
+def minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
     """Min-max scale `series` to [0, 100]. Returns 50.0 for constant input.
 
     When `groups` is provided, scaling is applied independently within each group.
@@ -111,10 +111,10 @@ def _minmax(series: pd.Series, groups: pd.Series | None = None) -> pd.Series:
 def compute_market_heat_index(df: pd.DataFrame) -> pd.Series:
     w      = HEAT_INDEX_COMPONENTS
     groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
-    dom_inv  = 100 - _minmax(df["days_on_market"],    groups)
-    sold     = _minmax(df["homes_sold"],               groups)
-    velocity = _minmax(df["price_velocity"],           groups)
-    lts      = _minmax(df["list_to_sale_ratio"],       groups)
+    dom_inv  = 100 - minmax(df["days_on_market"],    groups)
+    sold     = minmax(df["homes_sold"],               groups)
+    velocity = minmax(df["price_velocity"],           groups)
+    lts      = minmax(df["list_to_sale_ratio"],       groups)
     return (
         dom_inv  * w["days_on_market"]
         + sold     * w["homes_sold"]
@@ -145,15 +145,15 @@ def compute_net_rental_yield(df: pd.DataFrame) -> pd.Series:
 def compute_neighborhood_score(df: pd.DataFrame) -> pd.Series:
     w      = NEIGHBORHOOD_WEIGHTS
     groups = df["metro"] if NORMALIZATION_SCOPE == "per_metro" else None
-    inc  = _minmax(df["median_household_income"], groups)
-    edu  = _minmax(df["bachelor_rate"],           groups)  # guaranteed by data_loader PRD 2
+    inc  = minmax(df["median_household_income"], groups)
+    edu  = minmax(df["bachelor_rate"],           groups)  # guaranteed by data_loader PRD 2
     # LEAKAGE AUDIT — WARN (accepted): median_sale_price is included as a
     # 30%-weighted component (home_value proxy).  This makes neighborhood_score
     # a partial proxy for the current price level.  The RF target is price_t+6,
     # and price_t is used here — autoregressive, not future leakage.  It is a
     # secondary driver of R² > 0.92.  _refit_rf_features() in models.py refits
     # this feature's normalization on train rows only before the RF sees it.
-    hval = _minmax(df["median_sale_price"],       groups)
+    hval = minmax(df["median_sale_price"],       groups)
     return inc * w["income"] + edu * w["education"] + hval * w["home_value"]
 
 
@@ -187,7 +187,6 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
     df = df.sort_values(["zip_code", "month"]).reset_index(drop=True)
     df["yoy_appreciation"]   = compute_yoy_appreciation(df)
     df["price_velocity"]     = compute_price_velocity(df)
-    df["volume_trend"]       = compute_volume_trend(df)
     df["market_heat_index"]  = compute_market_heat_index(df)
     df["gross_rental_yield"] = compute_gross_rental_yield(df)
     df["net_rental_yield"]   = compute_net_rental_yield(df)
@@ -198,8 +197,29 @@ def engineer_features(df: pd.DataFrame, pop_stats: dict) -> tuple[pd.DataFrame, 
     pop_stats["median_market_heat_index"]  = float(df["market_heat_index"].median())
     pop_stats["median_neighborhood_score"] = float(df["neighborhood_score"].median())
     pop_stats["median_days_on_market"]     = float(df["days_on_market"].median())
+    pop_stats["median_sale_price"]         = float(df["median_sale_price"].median())
+    pop_stats["median_net_yield"]          = float(df["net_rental_yield"].median())
     pop_stats["is_finalized"]              = True
     return df, pop_stats
+
+
+def get_population_stats(df: pd.DataFrame) -> dict:
+    """Return population-level summary statistics from a feature-engineered DataFrame.
+
+    Requires engineer_features() to have been run (needs net_rental_yield,
+    yoy_appreciation, gross_rental_yield, market_heat_index, neighborhood_score).
+    Returns a dict with 8 keys usable by narrative.py and scoring displays.
+    """
+    return {
+        "median_yoy_appreciation":   float(df["yoy_appreciation"].median()),
+        "median_gross_rental_yield": float(df["gross_rental_yield"].median()),
+        "median_market_heat_index":  float(df["market_heat_index"].median()),
+        "median_neighborhood_score": float(df["neighborhood_score"].median()),
+        "median_days_on_market":     float(df["days_on_market"].median()),
+        "median_investment_score":   float(df["investment_score"].median()) if "investment_score" in df.columns else 0.0,
+        "median_sale_price":         float(df["median_sale_price"].median()),
+        "median_net_yield":          float(df["net_rental_yield"].median()),
+    }
 
 
 if __name__ == "__main__":
@@ -208,7 +228,7 @@ if __name__ == "__main__":
     raw, ps = generate_synthetic_data()
     raw_ps   = ps.copy()   # snapshot before finalization
     feature_cols = [
-        "yoy_appreciation", "price_velocity", "volume_trend",
+        "yoy_appreciation", "price_velocity",
         "market_heat_index", "gross_rental_yield", "net_rental_yield", "neighborhood_score",
     ]
 
@@ -262,7 +282,7 @@ if __name__ == "__main__":
     assert (df["neighborhood_score"].between(0, 100)).all()
 
     print("\n--- PRD 1 features ---")
-    for feat in ["yoy_appreciation", "price_velocity", "volume_trend", "market_heat_index"]:
+    for feat in ["yoy_appreciation", "price_velocity", "market_heat_index"]:
         s = df[feat].agg(["min", "max", "mean"])
         print(f"{feat:24s}  min={s['min']:8.4f}  max={s['max']:8.4f}  mean={s['mean']:8.4f}")
 

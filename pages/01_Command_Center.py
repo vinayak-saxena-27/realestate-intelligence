@@ -3,8 +3,9 @@ import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
 from charts import create_grade_donut, create_top10_table
-from config import COLORS
+from config import APP_ICON, COLORS, PAGE_TITLES
 
+st.set_page_config(page_title=PAGE_TITLES["command_center"], page_icon=APP_ICON, layout="wide")
 inject_css()
 st.title("Command Center")
 
@@ -42,7 +43,7 @@ def opportunity_card(row: pd.Series, pop_stats: dict) -> str:
             Gross Yield: {row['gross_rental_yield']:.1f}%
         </div>
         <div style="margin-bottom:12px">Market Segment: {segment}</div>
-        <a href="/Deep_Dive?zip={row['zip_code']}">View Deep Dive →</a>
+        <a href="/Zip_Code_Deep_Dive?zip={row['zip_code']}">View Deep Dive →</a>
     </div>"""
 
 
