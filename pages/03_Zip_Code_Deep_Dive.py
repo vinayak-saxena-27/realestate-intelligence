@@ -5,7 +5,6 @@ from charts import create_price_history, create_score_components
 from config import APP_ICON, GRADE_COLORS, PAGE_TITLES, SEGMENT_LABELS
 from narrative import generate_investment_narrative, get_key_pros_cons
 
-st.set_page_config(page_title=PAGE_TITLES["deep_dive"], page_icon=APP_ICON, layout="wide")
 inject_css()
 st.title(PAGE_TITLES["deep_dive"])
 

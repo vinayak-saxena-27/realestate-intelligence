@@ -23,6 +23,7 @@ from config import (
     LIST_TO_SALE_RATIO_RANGE,
     LOGNORMAL_BASE_PRICE,
     METROS,
+    METRO_COORDS,
     MAX_CSV_SIZE_MB,
     METRO_ZIP_BASE,
     N_MONTHS,
@@ -37,6 +38,26 @@ from config import (
     TOP_APPRECIATING_COUNT,
     ZIP_CODES_PER_METRO,
 )
+
+
+def _assign_coords(df: pd.DataFrame) -> pd.DataFrame:
+    """Add latitude/longitude columns — deterministic scatter around each metro center.
+
+    Uses a hash of the zip code so every zip always gets the same coordinates
+    regardless of row order or RNG state.
+    """
+    def _latlon(zip_code: str, metro: str) -> tuple[float, float]:
+        base_lat, base_lon = METRO_COORDS.get(metro, (39.5, -98.35))
+        h = int(hashlib.md5(zip_code.encode()).hexdigest(), 16)
+        return (
+            round(base_lat + (h % 1000 - 500) * 0.0006, 4),
+            round(base_lon + ((h >> 10) % 1000 - 500) * 0.0008, 4),
+        )
+
+    zip_metro = df.groupby("zip_code")["metro"].first().to_dict()
+    df["latitude"]  = df["zip_code"].map({z: _latlon(z, m)[0] for z, m in zip_metro.items()})
+    df["longitude"] = df["zip_code"].map({z: _latlon(z, m)[1] for z, m in zip_metro.items()})
+    return df
 
 
 _COLUMN_RANGES: dict[str, tuple] = {
@@ -481,6 +502,7 @@ def generate_synthetic_data() -> Tuple[pd.DataFrame, dict]:
         PRICE_ROUND_DP,
     )
 
+    df = _assign_coords(df)
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats
 
@@ -590,6 +612,7 @@ def load_csv_data(source: str | BinaryIO) -> Tuple[pd.DataFrame, dict]:
             df["median_sale_price"] / (1 + df["appreciation_rate"] / 100), PRICE_ROUND_DP
         )
 
+    df = _assign_coords(df)
     pop_stats = _compute_pop_stats(df)
     return df, pop_stats
 

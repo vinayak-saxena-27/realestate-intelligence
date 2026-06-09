@@ -6,7 +6,6 @@ from charts import style_figure
 from config import APP_ICON, CHART_COLORS, PAGE_TITLES
 from data_loader import get_price_history_df
 
-st.set_page_config(page_title="Market Comparison", page_icon=APP_ICON, layout="wide")
 inject_css()
 
 df, pop_stats, latest = load_page_data()

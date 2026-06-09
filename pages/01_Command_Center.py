@@ -5,7 +5,6 @@ from _styles import grade_badge, inject_css, load_page_data
 from charts import create_grade_donut, create_top10_table
 from config import APP_ICON, COLORS, PAGE_TITLES
 
-st.set_page_config(page_title=PAGE_TITLES["command_center"], page_icon=APP_ICON, layout="wide")
 inject_css()
 st.title("Command Center")
 st.markdown(
