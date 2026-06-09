@@ -13,7 +13,6 @@ from config import (
     RF_FEATURES,
 )
 
-st.set_page_config(page_title="Model Intelligence", page_icon=APP_ICON, layout="wide")
 inject_css()
 
 df, pop_stats, latest = load_page_data()

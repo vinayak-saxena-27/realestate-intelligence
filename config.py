@@ -97,6 +97,19 @@ METROS: dict[str, dict] = {
 if abs(sum(m["weight"] for m in METROS.values()) - 1.0) >= 1e-9:
     raise ValueError("Metro weights must sum to 1.0")
 
+METRO_COORDS: dict[str, tuple[float, float]] = {
+    "Austin TX":    (30.2672, -97.7431),
+    "Phoenix AZ":   (33.4484, -112.0740),
+    "Nashville TN": (36.1627, -86.7816),
+    "Charlotte NC": (35.2271, -80.8431),
+    "Tampa FL":     (27.9506, -82.4572),
+    "Denver CO":    (39.7392, -104.9903),
+    "Raleigh NC":   (35.7796, -78.6382),
+    "Atlanta GA":   (33.7490, -84.3880),
+    "Dallas TX":    (32.7767, -96.7970),
+    "Seattle WA":   (47.6062, -122.3321),
+}
+
 METRO_ZIP_BASE: dict[str, int] = {
     "Austin TX":    78700,
     "Phoenix AZ":   85000,
