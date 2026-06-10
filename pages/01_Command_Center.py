@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data
+from _styles import grade_badge, inject_css, load_page_data, table_card
 from charts import create_grade_donut, create_top10_table
 from config import APP_ICON, COLORS, PAGE_TITLES
 
@@ -87,7 +87,7 @@ try:
         st.subheader("Top 10 Zip Codes")
         top10 = create_top10_table(df).copy()
         top10["Grade"] = top10["Grade"].apply(grade_badge)
-        st.markdown(top10.to_html(escape=False, index=False), unsafe_allow_html=True)
+        st.markdown(table_card(top10.to_html(escape=False, index=False)), unsafe_allow_html=True)
 except Exception as e:
     st.error(f"Charts section failed: {e}")
 

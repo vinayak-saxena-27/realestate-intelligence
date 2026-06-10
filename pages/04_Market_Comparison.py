@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data
+from _styles import grade_badge, inject_css, load_page_data, table_card
 from charts import style_figure
 from config import CHART_COLORS
 from data_loader import get_price_history_df
@@ -95,7 +95,7 @@ def build_comparison_table(rows_df) -> str:
 
 try:
     st.subheader("Side-by-Side Metrics")
-    st.markdown(build_comparison_table(comp_latest), unsafe_allow_html=True)
+    st.markdown(table_card(build_comparison_table(comp_latest)), unsafe_allow_html=True)
 except Exception as e:
     st.error(f"Comparison table failed to render: {e}")
 

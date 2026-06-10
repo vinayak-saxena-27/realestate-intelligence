@@ -148,6 +148,22 @@ def inject_css() -> None:
         border-bottom-color: transparent;
     }}
 
+    /* ── Section subheadings (gold accent) ────────────────────── */
+    h3 {{
+        border-left: 3px solid {COLORS['gold']} !important;
+        padding-left: 10px !important;
+        margin-top: 0.25rem !important;
+    }}
+
+    /* ── Table wrapper card ─────────────────────────────────── */
+    .table-wrapper {{
+        border: 1px solid #DDE4EE;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(27,58,92,0.06), 0 4px 12px rgba(27,58,92,0.03);
+    }}
+    .table-wrapper table {{ border: none; }}
+
     /* ── HTML Tables ───────────────────────────────────────── */
     table {{
         width: 100%;
@@ -165,15 +181,23 @@ def inject_css() -> None:
         text-transform: uppercase;
         border: none;
     }}
+    th.num {{ text-align: right; }}
     td {{
         padding: 10px 14px;
         border-bottom: 1px solid #EEF2F7;
         color: #2D3748;
     }}
+    td.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    tr:nth-child(even) td {{ background: #F8FAFC; }}
     tr:last-child td {{ border-bottom: none; }}
-    tr:hover td {{ background: #F0F6FF; }}
+    tr:hover td {{ background: #F0F6FF !important; }}
     </style>
     """, unsafe_allow_html=True)
+
+
+def table_card(html: str) -> str:
+    """Wraps raw table HTML in a styled card container with border and shadow."""
+    return f'<div class="table-wrapper">{html}</div>'
 
 
 def grade_badge(grade: str) -> str:
