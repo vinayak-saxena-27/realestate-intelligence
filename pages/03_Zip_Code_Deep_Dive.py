@@ -2,8 +2,9 @@ import streamlit as st
 
 from _styles import grade_badge, inject_css, load_page_data
 from charts import create_price_history, create_score_components
-from config import GRADE_COLORS, PAGE_TITLES, SEGMENT_LABELS
+from config import COLORS, GRADE_COLORS, KMEANS_FEATURES, PAGE_TITLES, SEGMENT_LABELS
 from narrative import generate_investment_narrative, get_key_pros_cons
+from watchlist import add_zip, load_watchlist, remove_zip
 
 inject_css()
 st.title(PAGE_TITLES["deep_dive"])
@@ -32,6 +33,16 @@ if zip_rows.empty:
     st.warning("No data found for the selected zip code.")
     st.stop()
 row = zip_rows.iloc[0]
+
+# ── Watchlist toggle ──────────────────────────────────────────────────────────
+_wl = load_watchlist()
+_in_wl = selected_zip in _wl
+if st.button(
+    "✓ In Watchlist — Remove" if _in_wl else "☆ Add to Watchlist",
+    type="secondary" if _in_wl else "primary",
+):
+    remove_zip(selected_zip) if _in_wl else add_zip(selected_zip)
+    st.rerun()
 
 st.divider()
 
@@ -162,3 +173,60 @@ try:
     col_invest.markdown(invest_html, unsafe_allow_html=True)
 except Exception as e:
     col_invest.warning(f"Investment panel unavailable: {e}")
+
+st.divider()
+
+# ── Similar Markets ───────────────────────────────────────────────────────────
+
+def _find_similar(anchor, pool, n: int = 4):
+    """Return the n nearest zip codes in the same K-Means segment by Euclidean distance."""
+    same = pool[
+        (pool["market_segment"] == anchor["market_segment"]) &
+        (pool["zip_code"] != anchor["zip_code"])
+    ].copy()
+    if same.empty:
+        return same
+    a_vals = anchor[KMEANS_FEATURES].values.astype(float)
+    dists = ((same[KMEANS_FEATURES].values.astype(float) - a_vals) ** 2).sum(axis=1) ** 0.5
+    same["_dist"] = dists
+    return same.nsmallest(n, "_dist").drop(columns=["_dist"])
+
+
+st.subheader("Similar Markets")
+st.caption(
+    f"Nearest zip codes by market profile within the **{row['market_segment']}** segment"
+)
+
+try:
+    similar = _find_similar(row, latest)
+    if similar.empty:
+        st.info("No other zip codes share this market segment in the current data.")
+    else:
+        sim_cols = st.columns(len(similar))
+        for col, (_, sr) in zip(sim_cols, similar.iterrows()):
+            mini = f"""
+            <div style="background:white;border:1px solid #DDE4EE;border-radius:12px;
+            padding:16px 18px;box-shadow:0 1px 3px rgba(27,58,92,0.06),0 4px 12px rgba(27,58,92,0.03);
+            height:100%;box-sizing:border-box;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+                    <div>
+                        <div style="font-size:17px;font-weight:800;color:{COLORS['navy']};
+                        letter-spacing:-0.3px">{sr['zip_code']}</div>
+                        <div style="font-size:11px;color:#8A9BB0;margin-top:1px">{sr['metro']}</div>
+                    </div>
+                    {grade_badge(sr['investment_grade'])}
+                </div>
+                <div style="font-size:22px;font-weight:800;color:{COLORS['gold']};
+                letter-spacing:-0.5px">{sr['investment_score']:.1f}</div>
+                <div style="font-size:10px;font-weight:600;color:#8A9BB0;text-transform:uppercase;
+                letter-spacing:0.5px;margin-bottom:8px">Score</div>
+                <div style="font-size:12px;color:#4A5568;margin-bottom:12px">
+                    {sr['yoy_appreciation']:.1f}% appr · {sr['gross_rental_yield']:.1f}% yield
+                </div>
+                <a href="/Zip_Code_Deep_Dive?zip={sr['zip_code']}"
+                style="font-size:12px;font-weight:600;color:{COLORS['navy']};text-decoration:none;
+                border-bottom:1.5px solid {COLORS['gold']};padding-bottom:1px">View Analysis →</a>
+            </div>"""
+            col.markdown(mini, unsafe_allow_html=True)
+except Exception as e:
+    st.error(f"Similar markets section failed: {e}")
