@@ -4,6 +4,7 @@ from _styles import grade_badge, inject_css, load_page_data
 from charts import create_price_history, create_score_components
 from config import COLORS, GRADE_COLORS, KMEANS_FEATURES, PAGE_TITLES, SEGMENT_LABELS
 from narrative import generate_investment_narrative, get_key_pros_cons
+from report import generate_html_report
 from watchlist import add_zip, load_watchlist, remove_zip
 
 inject_css()
@@ -173,6 +174,30 @@ try:
     col_invest.markdown(invest_html, unsafe_allow_html=True)
 except Exception as e:
     col_invest.warning(f"Investment panel unavailable: {e}")
+
+st.divider()
+
+# ── Export Report ──────────────────────────────────────────────────────────────
+st.subheader("Export Report")
+try:
+    _narrative   = generate_investment_narrative(row, pop_stats)
+    _pros, _cons = get_key_pros_cons(row, pop_stats)
+    _report_html = generate_html_report(row, pop_stats, _pros, _cons, _narrative)
+    col_btn, col_hint = st.columns([1, 3])
+    col_btn.download_button(
+        label="Download Report",
+        data=_report_html.encode("utf-8"),
+        file_name=f"investment_report_{selected_zip}.html",
+        mime="text/html",
+        type="primary",
+        use_container_width=True,
+    )
+    col_hint.caption(
+        "Downloads a self-contained HTML report for this zip code. "
+        "Open in any browser and use **File → Print → Save as PDF** to export as PDF."
+    )
+except Exception as e:
+    st.warning(f"Report generation failed: {e}")
 
 st.divider()
 

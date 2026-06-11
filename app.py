@@ -58,87 +58,47 @@ def home_page() -> None:
 
     st.divider()
     st.subheader("Investment Grade Map")
+    st.caption("Bubble size = investment score · Color = grade · Hover for details")
 
-    map_view = st.radio(
-        "Map view",
-        options=["Bubble — by Grade", "Heatmap — by Score"],
-        horizontal=True,
-        label_visibility="collapsed",
+    fig = px.scatter_mapbox(
+        latest.sort_values("investment_grade"),
+        lat="latitude",
+        lon="longitude",
+        color="investment_grade",
+        size="investment_score",
+        color_discrete_map=GRADE_COLORS,
+        category_orders={"investment_grade": ["A", "B", "C", "D", "F"]},
+        hover_name="zip_code",
+        hover_data={
+            "metro":              True,
+            "investment_score":   ":.1f",
+            "yoy_appreciation":   ":.1f",
+            "gross_rental_yield": ":.1f",
+            "investment_grade":   False,
+            "latitude":           False,
+            "longitude":          False,
+        },
+        zoom=3.5,
+        center={"lat": 37.5, "lon": -96.0},
+        mapbox_style="open-street-map",
+        size_max=18,
     )
-
-    _MAP_LAYOUT = dict(
+    fig.update_layout(
         height=560,
         margin=dict(t=0, b=0, l=0, r=0),
         paper_bgcolor="white",
         font=dict(family="Inter, -apple-system, sans-serif"),
+        legend=dict(
+            title=dict(text="Grade", font=dict(size=12)),
+            orientation="v",
+            yanchor="top",  y=0.99,
+            xanchor="left", x=0.01,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#DDE4EE",
+            borderwidth=1,
+            font=dict(size=12),
+        ),
     )
-    _HOVER = {
-        "metro":              True,
-        "investment_score":   ":.1f",
-        "yoy_appreciation":   ":.1f",
-        "gross_rental_yield": ":.1f",
-        "latitude":           False,
-        "longitude":          False,
-    }
-    _MAP_KWARGS = dict(
-        lat="latitude", lon="longitude",
-        zoom=3.5, center={"lat": 37.5, "lon": -96.0},
-        mapbox_style="open-street-map",
-    )
-
-    if map_view == "Bubble — by Grade":
-        st.caption("Bubble size = investment score · Color = grade · Hover for details")
-        fig = px.scatter_mapbox(
-            latest.sort_values("investment_grade"),
-            color="investment_grade",
-            size="investment_score",
-            color_discrete_map=GRADE_COLORS,
-            category_orders={"investment_grade": ["A", "B", "C", "D", "F"]},
-            hover_name="zip_code",
-            hover_data={**_HOVER, "investment_grade": False},
-            size_max=18,
-            **_MAP_KWARGS,
-        )
-        fig.update_layout(
-            **_MAP_LAYOUT,
-            legend=dict(
-                title=dict(text="Grade", font=dict(size=12)),
-                orientation="v",
-                yanchor="top",  y=0.99,
-                xanchor="left", x=0.01,
-                bgcolor="rgba(255,255,255,0.9)",
-                bordercolor="#DDE4EE",
-                borderwidth=1,
-                font=dict(size=12),
-            ),
-        )
-    else:
-        st.caption("Color intensity = investment score (green = high · red = low) · Hover for details")
-        fig = px.density_mapbox(
-            latest,
-            z="investment_score",
-            hover_name="zip_code",
-            hover_data=_HOVER,
-            radius=65,
-            opacity=0.78,
-            color_continuous_scale="RdYlGn",
-            range_color=[0, 100],
-            **_MAP_KWARGS,
-        )
-        fig.update_layout(
-            **_MAP_LAYOUT,
-            coloraxis_colorbar=dict(
-                title=dict(text="Score", font=dict(size=12)),
-                thickness=14,
-                len=0.55,
-                tickvals=[0, 35, 50, 65, 80, 100],
-                ticktext=["0 (F)", "35 (D)", "50 (C)", "65 (B)", "80 (A)", "100"],
-                bgcolor="rgba(255,255,255,0.9)",
-                bordercolor="#DDE4EE",
-                borderwidth=1,
-            ),
-        )
-
     st.plotly_chart(fig, use_container_width=True)
 
 
