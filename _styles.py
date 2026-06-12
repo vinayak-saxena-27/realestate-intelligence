@@ -14,6 +14,8 @@ def inject_css() -> None:
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     }}
     .stDeployButton {{ display: none !important; }}
+    footer {{ visibility: hidden !important; }}
+    #MainMenu {{ visibility: hidden !important; }}
     .stApp {{ background-color: #F4F7FA; }}
     .block-container {{ padding-top: 1.75rem; padding-bottom: 2rem; }}
     hr {{ border-color: #E2E8F0 !important; margin: 1.25rem 0 !important; }}
@@ -29,6 +31,12 @@ def inject_css() -> None:
         letter-spacing: -0.2px !important;
     }}
 
+    /* ── Custom scrollbar ──────────────────────────────────── */
+    ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+    ::-webkit-scrollbar-track {{ background: #F4F7FA; }}
+    ::-webkit-scrollbar-thumb {{ background: #C5D3E0; border-radius: 10px; }}
+    ::-webkit-scrollbar-thumb:hover {{ background: #8A9BB0; }}
+
     /* ── Sidebar ─────────────────────────────────────────── */
     [data-testid="stSidebar"] {{
         background-color: #0D1F33 !important;
@@ -40,11 +48,114 @@ def inject_css() -> None:
     [data-testid="stSidebar"] h3 {{ color: #EBF4FF !important; }}
     [data-testid="stSidebarNavItems"] a {{
         color: #A0AFC0 !important;
-        border-radius: 6px;
+        border-radius: 8px !important;
+        padding: 6px 12px !important;
+        margin: 2px 0 !important;
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        transition: background 0.15s, color 0.15s !important;
+        display: block !important;
+    }}
+    [data-testid="stSidebarNavItems"] a:hover {{
+        background: rgba(255,255,255,0.07) !important;
+        color: #EBF4FF !important;
     }}
     [data-testid="stSidebarNavItems"] [aria-selected="true"] a {{
         background: rgba(201,168,76,0.18) !important;
         color: {COLORS['gold']} !important;
+        font-weight: 600 !important;
+    }}
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    [data-testid="stBaseButton-primary"],
+    button[data-testid="baseButton-primary"],
+    [data-testid="stButton"] > button[kind="primary"] {{
+        background: {COLORS['navy']} !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 13.5px !important;
+        letter-spacing: 0.2px !important;
+        padding: 0.45rem 1.25rem !important;
+        transition: background 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease !important;
+        box-shadow: 0 2px 8px rgba(27,58,92,0.20) !important;
+    }}
+    [data-testid="stBaseButton-primary"]:hover,
+    button[data-testid="baseButton-primary"]:hover,
+    [data-testid="stButton"] > button[kind="primary"]:hover {{
+        background: {COLORS['gold']} !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 16px rgba(27,58,92,0.25) !important;
+    }}
+    [data-testid="stBaseButton-secondary"],
+    button[data-testid="baseButton-secondary"],
+    [data-testid="stButton"] > button[kind="secondary"] {{
+        background: white !important;
+        color: {COLORS['navy']} !important;
+        border: 1.5px solid #DDE4EE !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 13.5px !important;
+        padding: 0.45rem 1.25rem !important;
+        transition: border-color 0.15s, background 0.15s, transform 0.12s !important;
+    }}
+    [data-testid="stBaseButton-secondary"]:hover,
+    button[data-testid="baseButton-secondary"]:hover,
+    [data-testid="stButton"] > button[kind="secondary"]:hover {{
+        border-color: {COLORS['navy']} !important;
+        background: #F4F7FA !important;
+        transform: translateY(-1px) !important;
+    }}
+
+    /* ── Selectbox ──────────────────────────────────────────── */
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div:first-child {{
+        background: white !important;
+        border: 1.5px solid #DDE4EE !important;
+        border-radius: 8px !important;
+        transition: border-color 0.15s !important;
+    }}
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div:hover {{
+        border-color: {COLORS['navy']} !important;
+    }}
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div:focus-within {{
+        border-color: {COLORS['navy']} !important;
+        box-shadow: 0 0 0 3px rgba(27,58,92,0.10) !important;
+    }}
+
+    /* ── Multiselect ────────────────────────────────────────── */
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div:first-child {{
+        background: white !important;
+        border: 1.5px solid #DDE4EE !important;
+        border-radius: 8px !important;
+        transition: border-color 0.15s !important;
+    }}
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div:hover {{
+        border-color: {COLORS['navy']} !important;
+    }}
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div:focus-within {{
+        border-color: {COLORS['navy']} !important;
+        box-shadow: 0 0 0 3px rgba(27,58,92,0.10) !important;
+    }}
+    [data-testid="stMultiSelect"] span[data-baseweb="tag"] {{
+        background: rgba(27,58,92,0.10) !important;
+        border-radius: 6px !important;
+        border-color: transparent !important;
+    }}
+    [data-testid="stMultiSelect"] span[data-baseweb="tag"] span:first-child {{
+        color: {COLORS['navy']} !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
+    }}
+
+    /* ── Dropdown option list ───────────────────────────────── */
+    [data-baseweb="menu"] [role="option"]:hover {{
+        background: #F0F6FF !important;
+    }}
+    [data-baseweb="menu"] [aria-selected="true"] {{
+        background: rgba(27,58,92,0.08) !important;
     }}
 
     /* ── st.metric widget ─────────────────────────────────── */
@@ -70,6 +181,21 @@ def inject_css() -> None:
     }}
     [data-testid="stMetricDelta"] {{ font-size: 12px !important; }}
 
+    /* ── st.caption ────────────────────────────────────────── */
+    [data-testid="stCaptionContainer"] p {{
+        color: #8A9BB0 !important;
+        font-size: 13px !important;
+        font-style: normal !important;
+    }}
+
+    /* ── Alerts ─────────────────────────────────────────────── */
+    [data-testid="stAlert"] {{
+        border-radius: 10px !important;
+        padding: 12px 16px !important;
+        font-size: 13.5px !important;
+        border-left-width: 4px !important;
+    }}
+
     /* ── KPI Cards ─────────────────────────────────────────── */
     .kpi-card {{
         background: white;
@@ -81,6 +207,11 @@ def inject_css() -> None:
         overflow: hidden;
         height: 100%;
         box-sizing: border-box;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }}
+    .kpi-card:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 8px 28px rgba(27,58,92,0.12), 0 2px 8px rgba(27,58,92,0.06) !important;
     }}
     .kpi-card::before {{
         content: '';
@@ -133,6 +264,11 @@ def inject_css() -> None:
         box-shadow: 0 1px 3px rgba(27,58,92,0.06), 0 4px 12px rgba(27,58,92,0.03);
         height: 100%;
         box-sizing: border-box;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }}
+    .opp-card:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 8px 28px rgba(27,58,92,0.12), 0 2px 8px rgba(27,58,92,0.06) !important;
     }}
     .opp-card a {{
         display: inline-block;
