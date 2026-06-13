@@ -345,6 +345,13 @@ def inject_css() -> None:
     """, unsafe_allow_html=True)
 
 
+def page_subtitle(text: str) -> None:
+    st.markdown(
+        f"<p style='color:#8A9BB0;font-size:13.5px;margin-top:-8px;margin-bottom:1rem'>{text}</p>",
+        unsafe_allow_html=True,
+    )
+
+
 def table_card(html: str) -> str:
     """Wraps raw table HTML in a styled card container with border and shadow."""
     return f'<div class="table-wrapper">{html}</div>'

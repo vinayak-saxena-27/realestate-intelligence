@@ -16,26 +16,39 @@ if "df" not in st.session_state:
 
     FILE_PATH = None  # swap to 'data/market_data.csv' for real data
 
-    with st.spinner("Loading market data and training models…"):
-        raw_df, pop_stats            = get_data(source=FILE_PATH)
-        df, pop_stats                = engineer_features(raw_df, pop_stats)
-        price_model, price_metrics   = train_price_model(df)
-        df["predicted_price_6m"]     = predict_prices(df, price_model)
-        st.session_state["price_model"]       = price_model
-        st.session_state["price_metrics"]     = price_metrics
-        st.session_state["price_importances"] = dict(
-            zip(RF_FEATURES, price_model.feature_importances_)
-        )
-        df                                   = compute_investment_score(df, pop_stats)
-        pop_stats["median_investment_score"] = float(df["investment_score"].median())
-        pop_stats["median_sale_price"]       = float(df["median_sale_price"].median())
-        pop_stats["median_net_yield"]        = float(df["net_rental_yield"].median())
-        kmeans_model, kmeans_scaler          = train_segment_model(df)
-        df["market_segment"]                 = label_segments(df, kmeans_model, kmeans_scaler)
-        st.session_state["kmeans_model"]     = kmeans_model
-        st.session_state["kmeans_scaler"]    = kmeans_scaler
-        st.session_state["df"]               = df
-        st.session_state["pop_stats"]        = pop_stats
+    _, mid, _ = st.columns([1, 1.4, 1])
+    with mid:
+        st.markdown("""
+            <div style="text-align:center;padding:80px 32px 28px">
+                <div style="font-size:56px;margin-bottom:16px">🏠</div>
+                <div style="font-size:21px;font-weight:800;color:#1B3A5C;letter-spacing:-0.4px;margin-bottom:8px">
+                    Real Estate Intelligence
+                </div>
+                <div style="font-size:13.5px;color:#8A9BB0;line-height:1.6">
+                    Loading market data and training models…
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        with st.spinner(""):
+            raw_df, pop_stats            = get_data(source=FILE_PATH)
+            df, pop_stats                = engineer_features(raw_df, pop_stats)
+            price_model, price_metrics   = train_price_model(df)
+            df["predicted_price_6m"]     = predict_prices(df, price_model)
+            st.session_state["price_model"]       = price_model
+            st.session_state["price_metrics"]     = price_metrics
+            st.session_state["price_importances"] = dict(
+                zip(RF_FEATURES, price_model.feature_importances_)
+            )
+            df                                   = compute_investment_score(df, pop_stats)
+            pop_stats["median_investment_score"] = float(df["investment_score"].median())
+            pop_stats["median_sale_price"]       = float(df["median_sale_price"].median())
+            pop_stats["median_net_yield"]        = float(df["net_rental_yield"].median())
+            kmeans_model, kmeans_scaler          = train_segment_model(df)
+            df["market_segment"]                 = label_segments(df, kmeans_model, kmeans_scaler)
+            st.session_state["kmeans_model"]     = kmeans_model
+            st.session_state["kmeans_scaler"]    = kmeans_scaler
+            st.session_state["df"]               = df
+            st.session_state["pop_stats"]        = pop_stats
 
 
 # ── Home page ─────────────────────────────────────────────────────────────────
@@ -103,6 +116,20 @@ def home_page() -> None:
 
 
 # ── Navigation ────────────────────────────────────────────────────────────────
+st.sidebar.markdown(
+    """
+    <div style="padding:14px 20px 18px;border-top:1px solid #1E3A56;margin-top:12px">
+        <div style="font-size:10.5px;font-weight:600;color:#3A5570;text-transform:uppercase;
+                    letter-spacing:0.8px;margin-bottom:4px">Coverage</div>
+        <div style="font-size:12px;color:#4A6A80;line-height:1.7">
+            200 zip codes · 10 metro areas<br>
+            Scores updated on data load
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 pages = st.navigation({
     "Overview": [
         st.Page(home_page, title="Market Overview", icon="🗺️"),

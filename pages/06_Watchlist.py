@@ -1,17 +1,13 @@
 import pandas as pd
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data, table_card
+from _styles import grade_badge, inject_css, load_page_data, page_subtitle, table_card
 from config import COLORS
 from watchlist import add_zip, load_watchlist, remove_zip
 
 inject_css()
 st.title("Watchlist")
-st.markdown(
-    "<p style='color:#8A9BB0;font-size:13.5px;margin-top:-8px;margin-bottom:1rem'>"
-    "Zip codes you're tracking — aggregate metrics update live with your data.</p>",
-    unsafe_allow_html=True,
-)
+page_subtitle("Zip codes you're tracking — aggregate metrics update live with your data")
 
 df, pop_stats, latest = load_page_data()
 

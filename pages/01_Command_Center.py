@@ -1,17 +1,13 @@
 import pandas as pd
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data, table_card
+from _styles import grade_badge, inject_css, load_page_data, page_subtitle, table_card
 from charts import create_grade_donut, create_top10_table
 from config import APP_ICON, COLORS, PAGE_TITLES
 
 inject_css()
 st.title("Command Center")
-st.markdown(
-    "<p style='color:#8A9BB0;font-size:13.5px;margin-top:-8px;margin-bottom:1rem'>"
-    "Real-time investment scores across 200 zip codes and 10 US metro areas</p>",
-    unsafe_allow_html=True,
-)
+page_subtitle("Real-time investment scores across 200 zip codes and 10 US metro areas")
 
 
 def kpi_card(label: str, value: str, delta: str = "") -> str:
@@ -38,9 +34,14 @@ def opportunity_card(row: pd.Series, pop_stats: dict) -> str:
             </div>
             <div style="margin-top:2px">{grade_badge(grade)}</div>
         </div>
-        <div style="background:#F4F7FA;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:baseline;gap:5px">
-            <span style="font-size:28px;font-weight:800;color:{COLORS['gold']};letter-spacing:-0.5px">{row['investment_score']:.1f}</span>
-            <span style="font-size:11px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.5px">/ 100</span>
+        <div style="background:#F4F7FA;border-radius:8px;padding:10px 14px 12px;margin-bottom:14px">
+            <div style="display:flex;align-items:baseline;gap:5px;margin-bottom:8px">
+                <span style="font-size:28px;font-weight:800;color:{COLORS['gold']};letter-spacing:-0.5px">{row['investment_score']:.1f}</span>
+                <span style="font-size:11px;font-weight:600;color:#8A9BB0;text-transform:uppercase;letter-spacing:0.5px">/ 100</span>
+            </div>
+            <div style="background:#E2E8F0;border-radius:4px;height:5px;overflow:hidden">
+                <div style="background:linear-gradient(90deg,{COLORS['navy']},{COLORS['gold']});border-radius:4px;height:100%;width:{row['investment_score']}%"></div>
+            </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:14px">
             <div>

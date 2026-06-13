@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data, table_card
+from _styles import grade_badge, inject_css, load_page_data, page_subtitle, table_card
 from charts import style_figure
 from config import CHART_COLORS
 from data_loader import get_price_history_df
@@ -11,6 +11,7 @@ inject_css()
 df, pop_stats, latest = load_page_data()
 
 st.title("Market Comparison")
+page_subtitle("Side-by-side metrics for up to 4 zip codes across all key investment signals")
 
 # ── Zip selector ──────────────────────────────────────────────────────────────
 zip_info   = latest.set_index("zip_code")[["metro", "investment_score"]].to_dict("index")

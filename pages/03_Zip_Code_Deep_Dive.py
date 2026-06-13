@@ -1,6 +1,6 @@
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data
+from _styles import grade_badge, inject_css, load_page_data, page_subtitle
 from charts import create_price_history, create_score_components
 from config import COLORS, GRADE_COLORS, KMEANS_FEATURES, PAGE_TITLES, SEGMENT_LABELS
 from narrative import generate_investment_narrative, get_key_pros_cons
@@ -9,6 +9,7 @@ from watchlist import add_zip, load_watchlist, remove_zip
 
 inject_css()
 st.title(PAGE_TITLES["deep_dive"])
+page_subtitle("Full metric breakdown, price history, and AI-generated investment narrative")
 
 df, pop_stats, latest = load_page_data()
 
