@@ -37,6 +37,20 @@ def inject_css() -> None:
     ::-webkit-scrollbar-thumb {{ background: #C5D3E0; border-radius: 10px; }}
     ::-webkit-scrollbar-thumb:hover {{ background: #8A9BB0; }}
 
+    /* ── Sidebar title (injected above nav via ::before) ────── */
+    [data-testid="stSidebarNav"]::before {{
+        content: "🏠  RE Intelligence";
+        display: block;
+        padding: 22px 20px 14px;
+        font-size: 18px;
+        font-weight: 800;
+        color: #EBF4FF;
+        letter-spacing: -0.3px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        border-bottom: 1px solid #1E3A56;
+        margin-bottom: 8px;
+    }}
+
     /* ── Sidebar ─────────────────────────────────────────── */
     [data-testid="stSidebar"] {{
         background-color: #0D1F33 !important;
