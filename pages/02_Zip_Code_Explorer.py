@@ -1,11 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-from _styles import grade_badge, inject_css, load_page_data, table_card
+from _styles import grade_badge, inject_css, load_page_data, page_subtitle, table_card
 from config import COLORS, GRADE_LABEL_MAP, PAGE_TITLES
 
 inject_css()
 st.title(PAGE_TITLES["explorer"])
+page_subtitle("Filter and rank all 200 zip codes by investment metrics")
 
 df, pop_stats, latest = load_page_data()
 
