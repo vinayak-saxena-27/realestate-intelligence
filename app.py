@@ -102,6 +102,22 @@ def home_page() -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
+# ── Sidebar title ─────────────────────────────────────────────────────────────
+st.sidebar.markdown(
+    f"""
+    <div style="padding:20px 16px 16px;border-bottom:1px solid #1E3A56;margin-bottom:8px">
+        <div style="font-size:22px;font-weight:800;color:#EBF4FF;letter-spacing:-0.3px;line-height:1.2">
+            {APP_ICON} RE Intelligence
+        </div>
+        <div style="font-size:11px;font-weight:500;color:#5A7A9A;text-transform:uppercase;
+                    letter-spacing:1px;margin-top:4px">
+            Investment Analytics
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ── Navigation ────────────────────────────────────────────────────────────────
 pages = st.navigation({
     "Overview": [
